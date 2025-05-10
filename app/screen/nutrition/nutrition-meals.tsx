@@ -1,5 +1,5 @@
 // app/screen/nutrition/nutrition-meals.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -9,17 +9,83 @@ import {
   Alert,
   SafeAreaView,
   Platform,
-  TextInput
+  TextInput,
+  ActivityIndicator,
+  Modal
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useRouter } from 'expo-router';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { db } from '../../../firebase';
+import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import foods from '../../../data/food/foods';
+import { Ionicons } from '@expo/vector-icons';
 
 function NutritionMealsScreen() {
+  const { user, isAuthenticated } = useAuth();
+  const router = useRouter();
+  
   const [calories, setCalories] = useState('2000');
   const [goal, setGoal] = useState('maintainMuscle');
   const [mealsPerDay, setMealsPerDay] = useState('5');
   const [generatedMeals, setGeneratedMeals] = useState<any[]>([]);
+  const [isLoadingNutritionGoal, setIsLoadingNutritionGoal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [planName, setPlanName] = useState('');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Load calorie target from active nutrition goal
+  useEffect(() => {
+    const loadCalorieTarget = async () => {
+      if (!isAuthenticated || !user) return;
+      
+      try {
+        setIsLoadingNutritionGoal(true);
+        
+        // Query for the most recent active nutrition goal
+        const nutritionGoalsRef = collection(db, 'nutritionGoals');
+        const q = query(
+          nutritionGoalsRef,
+          where('userId', '==', user.uid),
+          where('status', '==', 'active'),
+          orderBy('createdAt', 'desc'),
+          limit(1)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const goalDoc = querySnapshot.docs[0];
+          const goalData = goalDoc.data();
+          
+          if (goalData.calorieCalculation?.calorieTarget) {
+            // Set the calories from the active goal
+            setCalories(goalData.calorieCalculation.calorieTarget.toString());
+            
+            // Set a default meal plan name based on the goal
+            const goalType = goalData.calorieCalculation.goalType || 'custom';
+            let goalText = 'Custom';
+            
+            if (goalType === 'deficit') goalText = 'Fat Loss';
+            else if (goalType === 'aggressiveDeficit') goalText = 'Aggressive Fat Loss';
+            else if (goalType === 'maintenance') goalText = 'Maintenance';
+            else if (goalType === 'surplus') goalText = 'Muscle Gain';
+            
+            setPlanName(`${goalText} Meal Plan - ${new Date().toLocaleDateString()}`);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading nutrition goal:", error);
+      } finally {
+        setIsLoadingNutritionGoal(false);
+      }
+    };
+
+    loadCalorieTarget();
+  }, [isAuthenticated, user]);
 
   const goalMacros = {
     loseFat: { protein: 40, carbs: 30, fat: 30 },
@@ -128,11 +194,252 @@ function NutritionMealsScreen() {
   
     setGeneratedMeals(meals);
     
+    // Default plan name if not set from nutrition goal
+    if (!planName) {
+      setPlanName(`Meal Plan - ${new Date().toLocaleDateString()}`);
+    }
+    
     Alert.alert('Success', 'Meal plan generated successfully.');
   };
+
+  const handleSaveMealPlan = () => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    
+    if (generatedMeals.length === 0) {
+      Alert.alert('Error', 'Please generate a meal plan first.');
+      return;
+    }
+    
+    setShowSaveModal(true);
+  };
+  
+  const saveMealPlanToFirebase = async () => {
+    if (!isAuthenticated || !user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setShowSaveModal(false);
+      
+      const totalDailyCalories = generatedMeals.reduce(
+        (sum, meal) => sum + meal.macros.calories, 0
+      );
+      
+      const totalProtein = generatedMeals.reduce(
+        (sum, meal) => sum + meal.macros.protein, 0
+      );
+      
+      const totalCarbs = generatedMeals.reduce(
+        (sum, meal) => sum + meal.macros.carbs, 0
+      );
+      
+      const totalFat = generatedMeals.reduce(
+        (sum, meal) => sum + meal.macros.fat, 0
+      );
+
+      // Create a meal plan document
+      const mealPlanData = {
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+        
+        // Settings used to generate the plan
+        settings: {
+          calories: parseInt(calories),
+          mealsPerDay: parseInt(mealsPerDay),
+          goal: goal,
+          macroRatio: goalMacros[goal as keyof typeof goalMacros]
+        },
+        
+        // Plan metadata
+        name: planName,
+        
+        // Summary of total daily macros
+        dailyTotals: {
+          calories: totalDailyCalories,
+          protein: totalProtein,
+          carbs: totalCarbs,
+          fat: totalFat
+        },
+        
+        // The actual meals
+        meals: generatedMeals.map(meal => ({
+          name: meal.name,
+          label: meal.label,
+          macros: meal.macros,
+          foods: meal.foods.map(food => ({
+            name: food.displayName,
+            type: food.type,
+            amount: food.amount,
+            // Only include nutrient info for measured foods (not "as desired")
+            ...(typeof food.amount === 'number' ? {
+              protein: food.protein,
+              carbs: food.carbs,
+              fat: food.fat
+            } : {})
+          }))
+        }))
+      };
+      
+      await addDoc(collection(db, 'mealPlans'), mealPlanData);
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      
+      Alert.alert(
+        "Success",
+        "Your meal plan has been saved to your profile."
+      );
+    } catch (error) {
+      console.error("Error saving meal plan to Firebase:", error);
+      Alert.alert(
+        "Error",
+        "There was a problem saving your meal plan. Please try again."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLoginRedirect = () => {
+    setShowLoginModal(false);
+    router.push('/(auth)/login');
+  };
+
+  const handleRegisterRedirect = () => {
+    setShowLoginModal(false);
+    router.push('/(auth)/register');
+  };
+
+  const renderLoginModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showLoginModal}
+      onRequestClose={() => setShowLoginModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={() => setShowLoginModal(false)}
+          >
+            <Ionicons name="close" size={24} color={Colors.white} />
+          </TouchableOpacity>
+          
+          <Ionicons name="save-outline" size={50} color={Colors.primary} style={styles.modalIcon} />
+          
+          <Text style={styles.modalTitle}>Save Your Meal Plan</Text>
+          
+          <Text style={styles.modalText}>
+            Create an account or sign in to save your meal plan and access it anytime.
+          </Text>
+          
+          <TouchableOpacity 
+            style={styles.modalPrimaryButton}
+            onPress={handleLoginRedirect}
+          >
+            <Text style={styles.modalPrimaryButtonText}>Log In</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.modalSecondaryButton}
+            onPress={handleRegisterRedirect}
+          >
+            <Text style={styles.modalSecondaryButtonText}>Create Account</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => setShowLoginModal(false)}
+          >
+            <Text style={styles.modalCancelText}>Maybe Later</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderSaveModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showSaveModal}
+      onRequestClose={() => setShowSaveModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={() => setShowSaveModal(false)}
+          >
+            <Ionicons name="close" size={24} color={Colors.white} />
+          </TouchableOpacity>
+          
+          <Text style={styles.modalTitle}>Name Your Meal Plan</Text>
+          
+          <Text style={styles.modalText}>
+            Give your meal plan a name so you can easily find it later.
+          </Text>
+          
+          <View style={styles.modalInputContainer}>
+            <TextInput
+              style={styles.modalTextInput}
+              value={planName}
+              onChangeText={setPlanName}
+              placeholder="Enter meal plan name"
+              placeholderTextColor={Colors.textSecondary}
+            />
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.modalPrimaryButton}
+            onPress={saveMealPlanToFirebase}
+          >
+            <Text style={styles.modalPrimaryButtonText}>Save Plan</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => setShowSaveModal(false)}
+          >
+            <Text style={styles.modalCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+  
+  if (isLoadingNutritionGoal) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading your nutrition data...</Text>
+      </View>
+    );
+  }
   
   return (
     <SafeAreaView style={styles.safeArea}>
+      {renderLoginModal()}
+      {renderSaveModal()}
+      
+      {isSaving && (
+        <View style={styles.savingOverlay}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.savingText}>Saving your meal plan...</Text>
+        </View>
+      )}
+      
+      {saveSuccess && (
+        <View style={styles.saveSuccess}>
+          <Ionicons name="checkmark-circle" size={24} color="white" />
+          <Text style={styles.saveSuccessText}>Meal plan saved!</Text>
+        </View>
+      )}
+      
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.headerContainer}>
           <Text style={styles.title}>Generate Meal Plan</Text>
@@ -276,6 +583,14 @@ function NutritionMealsScreen() {
                 </View>
               </View>
             </View>
+            
+            <TouchableOpacity 
+              style={styles.saveButton}
+              onPress={handleSaveMealPlan}
+            >
+              <Ionicons name="save-outline" size={20} color={Colors.white} />
+              <Text style={styles.saveButtonText}>Save Meal Plan</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -291,6 +606,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: Colors.textSecondary,
+    marginTop: 12,
+    fontSize: 16,
   },
   contentContainer: {
     padding: 16,
@@ -523,6 +847,143 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.primary,
+  },
+  saveButton: {
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  saveButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+  },
+  modalIcon: {
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.white,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  modalText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  modalInputContainer: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    marginBottom: 20,
+  },
+  modalTextInput: {
+    flex: 1,
+    color: Colors.text,
+    height: '100%',
+    paddingHorizontal: 12,
+    fontSize: 16,
+  },
+  modalPrimaryButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalPrimaryButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalSecondaryButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalSecondaryButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+  },
+  modalCancelText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  // Loading overlay
+  savingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  savingText: {
+    color: Colors.white,
+    fontSize: 16,
+    marginTop: 12,
+  },
+  // Success indicator
+  saveSuccess: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    backgroundColor: Colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  saveSuccessText: {
+    color: Colors.white,
+    fontSize: 14,
+    marginLeft: 8,
   },
 });
 
