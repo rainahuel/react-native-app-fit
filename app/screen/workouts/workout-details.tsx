@@ -11,12 +11,11 @@ import {
   Alert 
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../../firebase';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import methodsConfig from '../../../data/workout/methods-config';
+import workoutService from '../../../services/workoutService';
 
 // Interfaces para los datos
 interface Exercise {
@@ -33,7 +32,7 @@ interface WorkoutDay {
 }
 
 interface WorkoutPlan {
-  id: string;
+  _id: string;  // Cambiado de id a _id para MongoDB
   methodKey: string;
   methodName: string;
   goal: string;
@@ -67,27 +66,24 @@ export default function WorkoutDetailsScreen() {
       try {
         setIsLoading(true);
         
-        // Obtener el plan de entrenamiento
-        const planDoc = await getDoc(doc(db, 'workoutPlans', id as string));
+        // Obtener el plan de entrenamiento usando nuestro servicio
+        const planData = await workoutService.getWorkoutPlanById(id as string);
         
-        if (!planDoc.exists()) {
+        if (!planData) {
           Alert.alert("Error", "Workout plan not found.");
           router.push('/(tabs)/workout');
           return;
         }
         
-        const planData = planDoc.data();
-        
-        // Convertir timestamp a Date
+        // Convertir string de fecha a objeto Date si es necesario
         let createdAt;
         try {
-          createdAt = planData.createdAt?.toDate?.() || new Date();
+          createdAt = new Date(planData.createdAt);
         } catch (e) {
           createdAt = new Date();
         }
         
         const plan: WorkoutPlan = {
-          id: planDoc.id,
           ...planData,
           createdAt
         } as WorkoutPlan;
@@ -120,20 +116,18 @@ export default function WorkoutDetailsScreen() {
       setIsUpdating(true);
       
       // Actualizar el progreso
-      const updatedProgress = {
-        ...workoutPlan.progress,
-        daysCompleted: workoutPlan.progress.daysCompleted + 1
-      };
+      const updatedDaysCompleted = workoutPlan.progress.daysCompleted + 1;
       
-      // Actualizar en Firestore
-      await updateDoc(doc(db, 'workoutPlans', workoutPlan.id), {
-        'progress.daysCompleted': updatedProgress.daysCompleted
-      });
+      // Actualizar en el backend usando nuestro servicio
+      await workoutService.updateWorkoutProgress(workoutPlan._id, updatedDaysCompleted);
       
       // Actualizar estado local
       setWorkoutPlan({
         ...workoutPlan,
-        progress: updatedProgress
+        progress: {
+          ...workoutPlan.progress,
+          daysCompleted: updatedDaysCompleted
+        }
       });
       
       Alert.alert("Success", "Workout day completed! Keep up the good work!");
@@ -145,6 +139,7 @@ export default function WorkoutDetailsScreen() {
     }
   };
 
+  // Función auxiliar para renderizar el texto del objetivo
   const renderGoalText = (goal: string) => {
     switch(goal) {
       case 'loseFat':
@@ -159,6 +154,9 @@ export default function WorkoutDetailsScreen() {
         return goal.charAt(0).toUpperCase() + goal.slice(1);
     }
   };
+
+  // El resto del componente (renderizado) permanece sin cambios
+  // Solo necesitamos actualizar las referencias de 'id' a '_id'
 
   // Mostrar indicador de carga
   if (isLoading) {

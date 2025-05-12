@@ -15,11 +15,10 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
-import { doc, collection, query, where, getDocs, updateDoc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../../firebase';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import nutritionService from '@/services/nutritionService';
 
 interface MacroResult {
   proteinGrams: number;
@@ -53,37 +52,34 @@ function MacroCalculatorScreen() {
       try {
         setIsLoadingNutritionGoal(true);
         
-        // Query for the most recent active nutrition goal
-        const nutritionGoalsRef = collection(db, 'nutritionGoals');
-        const q = query(
-          nutritionGoalsRef,
-          where('userId', '==', user.uid),
-          where('status', '==', 'active'),
-          orderBy('createdAt', 'desc'),
-          limit(1)
-        );
+        // Consulta el objetivo nutricional activo más reciente usando nuestro servicio
+        const nutritionGoals = await nutritionService.getNutritionGoals();
         
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          const goalDoc = querySnapshot.docs[0];
-          const goalData = goalDoc.data();
-          
-          if (goalData.calorieCalculation) {
-            // Set the calories from the active goal
-            setCalories(goalData.calorieCalculation.calorieTarget.toString());
+        if (nutritionGoals && nutritionGoals.length > 0) {
+          // Filtramos manualmente por objetivos activos y ordenamos por fecha (más reciente primero)
+          const activeGoals = nutritionGoals
+            .filter(goal => goal.status === 'active')
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             
-            // Set the goal type based on the calorie calculation
-            if (goalData.calorieCalculation.goalType) {
-              setGoal(goalData.calorieCalculation.goalType);
+          if (activeGoals.length > 0) {
+            const goalData = activeGoals[0];
+            
+            if (goalData.calorieCalculation) {
+              // Establecer las calorías del objetivo activo
+              setCalories(goalData.calorieCalculation.calorieTarget.toString());
+              
+              // Establecer el tipo de objetivo basado en el cálculo de calorías
+              if (goalData.calorieCalculation.goalType) {
+                setGoal(goalData.calorieCalculation.goalType);
+              }
+              
+              // Guardar el ID del objetivo para actualizaciones posteriores
+              setActiveNutritionGoalId(goalData._id);
             }
-            
-            // Save the goal ID for later updates
-            setActiveNutritionGoalId(goalDoc.id);
           }
         }
         
-        // Set the weight from user profile if available
+        // Establecer el peso del perfil del usuario si está disponible
         if (userData?.profile?.weight) {
           setWeight(userData.profile.weight.toString());
         }
@@ -152,14 +148,14 @@ function MacroCalculatorScreen() {
           },
           {
             text: "Save",
-            onPress: () => saveResultsToFirebase(macroResult)
+            onPress: () => saveResultsToBackend(macroResult)
           }
         ]
       );
     }
   };
 
-  const saveResultsToFirebase = async (macroResult: MacroResult) => {
+  const saveResultsToBackend = async (macroResult: MacroResult) => {
     if (!isAuthenticated || !user) {
       setShowLoginModal(true);
       return;
@@ -168,7 +164,7 @@ function MacroCalculatorScreen() {
     try {
       setIsSaving(true);
 
-      // Calculate percentages for macros
+      // Calcular porcentajes para macros
       const totalCals = macroResult.calories;
       const proteinPercentage = Math.round((macroResult.proteinCals / totalCals) * 100);
       const carbsPercentage = Math.round((macroResult.carbCals / totalCals) * 100);
@@ -189,21 +185,18 @@ function MacroCalculatorScreen() {
         }
       };
 
-      // If we have an active nutrition goal, update it
+      // Si tenemos un objetivo nutricional activo, actualizarlo
       if (activeNutritionGoalId) {
-        const nutritionGoalRef = doc(db, 'nutritionGoals', activeNutritionGoalId);
-        await updateDoc(nutritionGoalRef, {
+        await nutritionService.updateNutritionGoal(activeNutritionGoalId, {
           macroDistribution: macroDistribution,
-          lastUpdated: serverTimestamp()
+          lastUpdated: new Date().toISOString()
         });
       } else {
-        // If no active goal exists, create a new one with basic calorie info and macros
+        // Si no existe un objetivo activo, crear uno nuevo con información calórica básica y macros
         const newGoalData = {
-          userId: user.uid,
-          createdAt: serverTimestamp(),
           status: "active",
           name: `Nutrition Goal - ${new Date().toLocaleDateString()}`,
-          startDate: serverTimestamp(),
+          startDate: new Date().toISOString(),
           calorieCalculation: {
             calorieTarget: macroResult.calories,
             goalType: goal
@@ -211,7 +204,7 @@ function MacroCalculatorScreen() {
           macroDistribution: macroDistribution
         };
         
-        await addDoc(collection(db, 'nutritionGoals'), newGoalData);
+        await nutritionService.createNutritionGoal(newGoalData);
       }
       
       setSaveSuccess(true);
@@ -222,7 +215,7 @@ function MacroCalculatorScreen() {
         "Your macro calculation has been saved to your profile."
       );
     } catch (error) {
-      console.error("Error saving macros to Firebase:", error);
+      console.error("Error saving macros:", error);
       Alert.alert(
         "Error",
         "There was a problem saving your data. Please try again."
@@ -230,6 +223,13 @@ function MacroCalculatorScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const getPickerItemColor = () => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      return Colors.text;
+    }
+    return Colors.text;
   };
 
   const handleLoginRedirect = () => {
@@ -369,9 +369,9 @@ function MacroCalculatorScreen() {
                 dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
                 itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="Lose Fat" value="deficit" color={Colors.text} />
-                <Picker.Item label="Maintain" value="maintenance" color={Colors.text} />
-                <Picker.Item label="Gain Muscle" value="surplus" color={Colors.text} />
+                <Picker.Item label="Lose Fat" value="deficit" color={getPickerItemColor()} />
+                <Picker.Item label="Maintain" value="maintenance" color={getPickerItemColor()} />
+                <Picker.Item label="Gain Muscle" value="surplus" color={getPickerItemColor()} />
               </Picker>
             </View>
           </View>
@@ -457,7 +457,7 @@ function MacroCalculatorScreen() {
             {isAuthenticated && (
               <TouchableOpacity 
                 style={styles.saveResultsButton}
-                onPress={() => saveResultsToFirebase(result)}
+                onPress={() => saveResultsToBackend(result)}
                 disabled={isSaving}
               >
                 <Ionicons name="save-outline" size={20} color={Colors.white} />

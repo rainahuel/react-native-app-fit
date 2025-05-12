@@ -10,17 +10,15 @@ import {
   Alert,
   SafeAreaView,
   Platform,
-  Dimensions,
   Modal,
   ActivityIndicator
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
-import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../firebase';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import nutritionService from '../../../services/nutritionService';
 
 interface ResultData {
   bmr: number;
@@ -162,14 +160,14 @@ function CaloriesCalculatorScreen() {
           },
           {
             text: "Save",
-            onPress: () => saveResultsToFirebase(calculationResult)
+            onPress: () => saveResultsToBackend(calculationResult)
           }
         ]
       );
     }
   };
 
-  const saveResultsToFirebase = async (resultData: ResultData) => {
+  const saveResultsToBackend = async (resultData: ResultData) => {
     if (!isAuthenticated || !user) {
       setShowLoginModal(true);
       return;
@@ -199,11 +197,9 @@ function CaloriesCalculatorScreen() {
 
       // 2. Create a new nutrition goal
       const nutritionGoalData = {
-        userId: user.uid,
-        createdAt: serverTimestamp(),
         status: "active",
         name: `Calorie Goal - ${new Date().toLocaleDateString()}`,
-        startDate: serverTimestamp(),
+        startDate: new Date().toISOString(),
         calorieCalculation: {
           bmr: resultData.bmr,
           tdee: resultData.tdee,
@@ -220,7 +216,7 @@ function CaloriesCalculatorScreen() {
         }
       };
 
-      await addDoc(collection(db, 'nutritionGoals'), nutritionGoalData);
+      await nutritionService.createNutritionGoal(nutritionGoalData);
       
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -230,7 +226,7 @@ function CaloriesCalculatorScreen() {
         "Your calorie calculation has been saved to your profile."
       );
     } catch (error) {
-      console.error("Error saving data to Firebase:", error);
+      console.error("Error saving data to server:", error);
       Alert.alert(
         "Error",
         "There was a problem saving your data. Please try again."
@@ -238,6 +234,16 @@ function CaloriesCalculatorScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Similar function to getPickerItemColor from WorkoutScreen to fix the white-on-white issue
+  const getPickerItemColor = () => {
+    // En iOS y Android, usamos el color del tema
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      return Colors.text;
+    }
+    // En web u otras plataformas, podemos usar otro color si es necesario
+    return Colors.text;
   };
 
   const handleLoginRedirect = () => {
@@ -364,11 +370,11 @@ function CaloriesCalculatorScreen() {
                   selectedValue={formData.gender}
                   onValueChange={(value) => handleInputChange('gender', value)}
                   style={styles.picker}
-                  dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                  dropdownIconColor={Colors.text}
                   itemStyle={styles.pickerItem}
                 >
-                  <Picker.Item label="Male" value="male" color={Colors.text} />
-                  <Picker.Item label="Female" value="female" color={Colors.text} />
+                  <Picker.Item label="Male" value="male" color={getPickerItemColor()} />
+                  <Picker.Item label="Female" value="female" color={getPickerItemColor()} />
                 </Picker>
               </View>
             </View>
@@ -396,13 +402,13 @@ function CaloriesCalculatorScreen() {
                   selectedValue={formData.goal}
                   onValueChange={(value) => handleInputChange('goal', value)}
                   style={styles.picker}
-                  dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                  dropdownIconColor={Colors.text}
                   itemStyle={styles.pickerItem}
                 >
-                  <Picker.Item label="Lose Weight" value="deficit" color={Colors.text} />
-                  <Picker.Item label="Lose Weight (Faster)" value="aggressiveDeficit" color={Colors.text} />
-                  <Picker.Item label="Maintain" value="maintenance" color={Colors.text} />
-                  <Picker.Item label="Gain Weight" value="surplus" color={Colors.text} />
+                  <Picker.Item label="Lose Weight" value="deficit" color={getPickerItemColor()} />
+                  <Picker.Item label="Lose Weight (Faster)" value="aggressiveDeficit" color={getPickerItemColor()} />
+                  <Picker.Item label="Maintain" value="maintenance" color={getPickerItemColor()} />
+                  <Picker.Item label="Gain Weight" value="surplus" color={getPickerItemColor()} />
                 </Picker>
               </View>
             </View>
@@ -469,7 +475,7 @@ function CaloriesCalculatorScreen() {
               {isAuthenticated && (
                 <TouchableOpacity 
                   style={styles.saveResultsButton}
-                  onPress={() => saveResultsToFirebase(result)}
+                  onPress={() => saveResultsToBackend(result)}
                   disabled={isSaving}
                 >
                   <Ionicons name="save-outline" size={20} color={Colors.white} />
@@ -491,6 +497,7 @@ function CaloriesCalculatorScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Los estilos se mantienen igual
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,

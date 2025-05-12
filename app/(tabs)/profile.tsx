@@ -12,15 +12,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase';
+import nutritionService from '../../services/nutritionService';
+import mealService from '../../services/mealService';
+import workoutService from '../../services/workoutService';
 import Colors from '../../constants/Colors';
 import { useAuth } from '../../context/AuthContext';
+import { useRefreshContext, RefreshableDataType } from '@/context/RefreshContext';
+import { useRefreshableData } from '@/hooks/useRefreshableData';
 
 // Tipos para la información guardada
 interface NutritionGoal {
     id: string;
     name: string;
+    status?: string;
     calorieCalculation?: {
         calorieTarget: number;
         bmr?: number;
@@ -67,160 +71,113 @@ interface WorkoutPlan {
 }
 
 export default function ProfileScreen() {
-
-    const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
     const router = useRouter();
     const { user, userData, signOut, isAuthenticated, isLoading } = useAuth();
+    const { refreshCounters } = useRefreshContext();
 
+    // Usar el hook useRefreshableData para cada tipo de datos
+    const {
+        data: nutritionGoalsData,
+        isLoading: isLoadingNutrition,
+    } = useRefreshableData<any>({
+        fetchFunction: () => nutritionService.getNutritionGoals(),
+        dataType: 'nutritionGoals' as RefreshableDataType,
+        dependencies: [isAuthenticated, user?._id]
+    });
+
+    const {
+        data: mealPlansData,
+        isLoading: isLoadingMeals,
+    } = useRefreshableData<any>({
+        fetchFunction: () => mealService.getMealPlans(),
+        dataType: 'mealPlans' as RefreshableDataType,
+        dependencies: [isAuthenticated, user?._id]
+    });
+
+    const {
+        data: workoutPlansData,
+        isLoading: isLoadingWorkouts,
+    } = useRefreshableData<any>({
+        fetchFunction: () => workoutService.getWorkoutPlans('active'),
+        dataType: 'workoutPlans' as RefreshableDataType,
+        dependencies: [isAuthenticated, user?._id]
+    });
+
+    // Estados para los datos procesados
     const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal | null>(null);
     const [recentMealPlans, setRecentMealPlans] = useState<MealPlan[]>([]);
-    const [isLoadingUserData, setIsLoadingUserData] = useState(false);
+    const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
 
-    // Cargar datos del usuario cuando esté autenticado
+    // Procesar objetivos de nutrición cuando los datos cambian
     useEffect(() => {
-        const loadUserData = async () => {
-            if (!isAuthenticated || !user) return;
+        if (nutritionGoalsData && nutritionGoalsData.length > 0) {
+            // Filtrar los objetivos activos
+            const activeGoals = nutritionGoalsData
+                .filter((goal: any) => goal.status === 'active')
+                .map((goal: any) => ({
+                    id: goal._id,
+                    ...goal,
+                    createdAt: new Date(goal.createdAt)
+                }));
 
-            try {
-                setIsLoadingUserData(true);
+            // Ordenar por fecha manualmente
+            activeGoals.sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
 
-                // 1. Cargar el objetivo nutricional activo - consulta simplificada sin orderBy
-                try {
-
-
-
-
-
-                    const nutritionGoalsRef = collection(db, 'nutritionGoals');
-
-                    // Consulta simple con un solo filtro
-                    const nutritionQuery = query(
-                        nutritionGoalsRef,
-                        where('userId', '==', user.uid)
-                    );
-
-                    const nutritionSnapshot = await getDocs(nutritionQuery);
-                    console.log(`Found ${nutritionSnapshot.size} nutrition goals`);
-
-                    if (!nutritionSnapshot.empty) {
-                        // Procesamiento manual para encontrar el objetivo activo más reciente
-                        const activeGoals = nutritionSnapshot.docs
-                            .filter(doc => doc.data().status === 'active')
-                            .map(doc => ({
-                                id: doc.id,
-                                ...doc.data(),
-                                createdAt: doc.data().createdAt?.toDate?.() || new Date()
-                            }));
-
-                        // Ordenar por fecha manualmente
-                        activeGoals.sort((a, b) => b.createdAt - a.createdAt);
-
-                        if (activeGoals.length > 0) {
-                            setNutritionGoal(activeGoals[0] as NutritionGoal);
-                            console.log("Active nutrition goal found:", activeGoals[0].id);
-                        }
-                    }
-                } catch (nutritionError) {
-                    console.error("Error loading nutrition goals:", nutritionError);
-                    // Continuar con el resto de las consultas aunque esta falle
-                }
-
-                // 2. Cargar planes de comida recientes - consulta simplificada sin orderBy
-                try {
-                    const mealPlansRef = collection(db, 'mealPlans');
-                    const mealPlansQuery = query(
-                        mealPlansRef,
-                        where('userId', '==', user.uid)
-                    );
-
-                    const mealPlansSnapshot = await getDocs(mealPlansQuery);
-                    console.log(`Found ${mealPlansSnapshot.size} meal plans`);
-
-                    if (!mealPlansSnapshot.empty) {
-                        const plans = mealPlansSnapshot.docs
-                            .map(doc => {
-                                const data = doc.data();
-                                // Manejo seguro de fechas
-                                let createdAt;
-                                try {
-                                    createdAt = data.createdAt?.toDate?.() || new Date();
-                                } catch (e) {
-                                    createdAt = new Date();
-                                }
-
-                                return {
-                                    id: doc.id,
-                                    ...data,
-                                    createdAt: createdAt
-                                };
-                            });
-
-                        // Ordenar manualmente por fecha (más reciente primero)
-                        plans.sort((a, b) => b.createdAt - a.createdAt);
-
-                        // Tomar solo los 3 más recientes
-                        const recentPlans = plans.slice(0, 3);
-
-                        setRecentMealPlans(recentPlans as MealPlan[]);
-                        console.log("Meal plans loaded:", recentPlans.length);
-                    }
-                } catch (mealPlansError) {
-                    console.error("Error loading meal plans:", mealPlansError);
-                }
-
-
-
-                // 3. Cargar planes de entrenamiento recientes
-                try {
-                    const workoutPlansRef = collection(db, 'workoutPlans');
-                    const workoutPlansQuery = query(
-                        workoutPlansRef,
-                        where('userId', '==', user.uid),
-                        where('status', '==', 'active')
-                    );
-
-                    const workoutPlansSnapshot = await getDocs(workoutPlansQuery);
-                    console.log(`Found ${workoutPlansSnapshot.size} workout plans`);
-
-                    if (!workoutPlansSnapshot.empty) {
-                        const plans = workoutPlansSnapshot.docs
-                            .map(doc => {
-                                const data = doc.data();
-                                // Manejo seguro de fechas
-                                let createdAt;
-                                try {
-                                    createdAt = data.createdAt?.toDate?.() || new Date();
-                                } catch (e) {
-                                    createdAt = new Date();
-                                }
-
-                                return {
-                                    id: doc.id,
-                                    ...data,
-                                    createdAt: createdAt
-                                };
-                            });
-
-                        // Ordenar manualmente por fecha (más reciente primero)
-                        plans.sort((a, b) => b.createdAt - a.createdAt);
-
-                        // Tomar solo los planes activos más recientes
-                        setWorkoutPlans(plans as WorkoutPlan[]);
-                        console.log("Workout plans loaded:", plans.length);
-                    }
-                } catch (workoutPlansError) {
-                    console.error("Error loading workout plans:", workoutPlansError);
-                }
-
-            } catch (error) {
-                console.error("Error loading user data:", error);
-            } finally {
-                setIsLoadingUserData(false);
+            if (activeGoals.length > 0) {
+                setNutritionGoal(activeGoals[0] as NutritionGoal);
+                console.log("Active nutrition goal found:", activeGoals[0].id);
+            } else {
+                setNutritionGoal(null);
             }
-        };
+        } else {
+            setNutritionGoal(null);
+        }
+    }, [nutritionGoalsData]);
 
-        loadUserData();
-    }, [isAuthenticated, user]);
+    // Procesar planes de comida cuando los datos cambian
+    useEffect(() => {
+        if (mealPlansData && mealPlansData.length > 0) {
+            const plans = mealPlansData.map((plan: any) => ({
+                id: plan._id,
+                ...plan,
+                createdAt: new Date(plan.createdAt)
+            }));
+
+            // Ordenar manualmente por fecha (más reciente primero)
+            plans.sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
+
+            // Tomar solo los 3 más recientes
+            const recentPlans = plans.slice(0, 3);
+
+            setRecentMealPlans(recentPlans as MealPlan[]);
+            console.log("Meal plans loaded:", recentPlans.length);
+        } else {
+            setRecentMealPlans([]);
+        }
+    }, [mealPlansData]);
+
+    // Procesar planes de entrenamiento cuando los datos cambian
+    useEffect(() => {
+        if (workoutPlansData && workoutPlansData.length > 0) {
+            const plans = workoutPlansData.map((plan: any) => ({
+                id: plan._id,
+                ...plan,
+                createdAt: new Date(plan.createdAt)
+            }));
+
+            // Ordenar manualmente por fecha (más reciente primero)
+            plans.sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
+
+            // Establecer los planes activos
+            setWorkoutPlans(plans as WorkoutPlan[]);
+            console.log("Workout plans loaded:", plans.length);
+        } else {
+            setWorkoutPlans([]);
+        }
+    }, [workoutPlansData]);
+
+    // Determinar si algún dato está cargando
+    const isLoadingUserData = isLoadingNutrition || isLoadingMeals || isLoadingWorkouts;
 
     // Función para manejar el cierre de sesión
     const handleLogout = async () => {

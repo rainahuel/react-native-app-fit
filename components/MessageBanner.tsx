@@ -1,5 +1,7 @@
+// components/MessageBanner.tsx
 import React, { useEffect, useState } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 
 interface MessageBannerProps {
@@ -12,23 +14,39 @@ interface MessageBannerProps {
 function MessageBanner({ message, type, visible, onHide }: MessageBannerProps) {
   const [animation] = useState(new Animated.Value(0));
 
+  // Use useEffect instead of directly calling onHide in the prop
   useEffect(() => {
     if (visible) {
-      Animated.sequence([
-        Animated.timing(animation, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.delay(3000),
-        Animated.timing(animation, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start(() => onHide());
+      Animated.timing(animation, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+      // Auto-hide after 3 seconds
+      const timer = setTimeout(() => {
+        hideMessage();
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    } else {
+      animation.setValue(0);
     }
   }, [visible]);
+
+  // Create a separate function to handle hiding the message
+  const hideMessage = () => {
+    Animated.timing(animation, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      // Call onHide after animation completes
+      if (visible) {
+        onHide();
+      }
+    });
+  };
 
   if (!visible) return null;
 
@@ -36,11 +54,31 @@ function MessageBanner({ message, type, visible, onHide }: MessageBannerProps) {
     <Animated.View
       style={[
         styles.container,
-        type === 'success' ? styles.success : styles.error,
-        { opacity: animation },
+        type === 'success' ? styles.successContainer : styles.errorContainer,
+        {
+          opacity: animation,
+          transform: [
+            {
+              translateY: animation.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-50, 0],
+              }),
+            },
+          ],
+        },
       ]}
     >
-      <Text style={styles.message}>{message}</Text>
+      <View style={styles.content}>
+        <Ionicons
+          name={type === 'success' ? 'checkmark-circle' : 'alert-circle'}
+          size={24}
+          color="#fff"
+        />
+        <Text style={styles.message}>{message}</Text>
+      </View>
+      <TouchableOpacity style={styles.closeButton} onPress={hideMessage}>
+        <Ionicons name="close" size={20} color="#fff" />
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -48,28 +86,34 @@ function MessageBanner({ message, type, visible, onHide }: MessageBannerProps) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 50,
-    left: 20,
-    right: 20,
-    padding: 15,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 1000,
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 9999,
   },
-  success: {
+  successContainer: {
     backgroundColor: '#4CAF50',
   },
-  error: {
+  errorContainer: {
     backgroundColor: '#F44336',
   },
+  content: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   message: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    textAlign: 'center',
+    color: '#fff',
+    marginLeft: 10,
+    fontSize: 14,
+    flex: 1,
+  },
+  closeButton: {
+    padding: 5,
   },
 });
 

@@ -15,8 +15,8 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../../firebase';
+import nutritionService from '../../../services/nutritionService';
+import mealService from '../../../services/mealService';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import foods from '../../../data/food/foods';
@@ -37,6 +37,13 @@ function NutritionMealsScreen() {
   const [planName, setPlanName] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
 
+  const getPickerItemColor = () => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      return Colors.text;
+    }
+    return Colors.text;
+  };
+
   // Load calorie target from active nutrition goal
   useEffect(() => {
     const loadCalorieTarget = async () => {
@@ -45,36 +52,33 @@ function NutritionMealsScreen() {
       try {
         setIsLoadingNutritionGoal(true);
         
-        // Query for the most recent active nutrition goal
-        const nutritionGoalsRef = collection(db, 'nutritionGoals');
-        const q = query(
-          nutritionGoalsRef,
-          where('userId', '==', user.uid),
-          where('status', '==', 'active'),
-          orderBy('createdAt', 'desc'),
-          limit(1)
-        );
+        // Consultar los objetivos nutricionales usando nuestro servicio
+        const nutritionGoals = await nutritionService.getNutritionGoals();
         
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          const goalDoc = querySnapshot.docs[0];
-          const goalData = goalDoc.data();
-          
-          if (goalData.calorieCalculation?.calorieTarget) {
-            // Set the calories from the active goal
-            setCalories(goalData.calorieCalculation.calorieTarget.toString());
+        if (nutritionGoals && nutritionGoals.length > 0) {
+          // Filtrar manualmente los objetivos activos y ordenarlos por fecha (más reciente primero)
+          const activeGoals = nutritionGoals
+            .filter(goal => goal.status === 'active')
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             
-            // Set a default meal plan name based on the goal
-            const goalType = goalData.calorieCalculation.goalType || 'custom';
-            let goalText = 'Custom';
+          if (activeGoals.length > 0) {
+            const goalData = activeGoals[0];
             
-            if (goalType === 'deficit') goalText = 'Fat Loss';
-            else if (goalType === 'aggressiveDeficit') goalText = 'Aggressive Fat Loss';
-            else if (goalType === 'maintenance') goalText = 'Maintenance';
-            else if (goalType === 'surplus') goalText = 'Muscle Gain';
-            
-            setPlanName(`${goalText} Meal Plan - ${new Date().toLocaleDateString()}`);
+            if (goalData.calorieCalculation?.calorieTarget) {
+              // Establecer las calorías del objetivo activo
+              setCalories(goalData.calorieCalculation.calorieTarget.toString());
+              
+              // Establecer un nombre de plan de comidas predeterminado basado en el objetivo
+              const goalType = goalData.calorieCalculation.goalType || 'custom';
+              let goalText = 'Custom';
+              
+              if (goalType === 'deficit') goalText = 'Fat Loss';
+              else if (goalType === 'aggressiveDeficit') goalText = 'Aggressive Fat Loss';
+              else if (goalType === 'maintenance') goalText = 'Maintenance';
+              else if (goalType === 'surplus') goalText = 'Muscle Gain';
+              
+              setPlanName(`${goalText} Meal Plan - ${new Date().toLocaleDateString()}`);
+            }
           }
         }
       } catch (error) {
@@ -216,7 +220,7 @@ function NutritionMealsScreen() {
     setShowSaveModal(true);
   };
   
-  const saveMealPlanToFirebase = async () => {
+  const saveMealPlanToBackend = async () => {
     if (!isAuthenticated || !user) {
       setShowLoginModal(true);
       return;
@@ -242,12 +246,9 @@ function NutritionMealsScreen() {
         (sum, meal) => sum + meal.macros.fat, 0
       );
 
-      // Create a meal plan document
+      // Crear documento de plan de comidas para nuestro backend
       const mealPlanData = {
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        
-        // Settings used to generate the plan
+        // Settings usados para generar el plan
         settings: {
           calories: parseInt(calories),
           mealsPerDay: parseInt(mealsPerDay),
@@ -255,10 +256,10 @@ function NutritionMealsScreen() {
           macroRatio: goalMacros[goal as keyof typeof goalMacros]
         },
         
-        // Plan metadata
+        // Metadata del plan
         name: planName,
         
-        // Summary of total daily macros
+        // Resumen de macros diarios totales
         dailyTotals: {
           calories: totalDailyCalories,
           protein: totalProtein,
@@ -266,7 +267,7 @@ function NutritionMealsScreen() {
           fat: totalFat
         },
         
-        // The actual meals
+        // Las comidas propiamente dichas
         meals: generatedMeals.map(meal => ({
           name: meal.name,
           label: meal.label,
@@ -275,7 +276,7 @@ function NutritionMealsScreen() {
             name: food.displayName,
             type: food.type,
             amount: food.amount,
-            // Only include nutrient info for measured foods (not "as desired")
+            // Solo incluir información nutricional para alimentos medidos (no "a discreción")
             ...(typeof food.amount === 'number' ? {
               protein: food.protein,
               carbs: food.carbs,
@@ -285,7 +286,7 @@ function NutritionMealsScreen() {
         }))
       };
       
-      await addDoc(collection(db, 'mealPlans'), mealPlanData);
+      await mealService.createMealPlan(mealPlanData);
       
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -295,7 +296,7 @@ function NutritionMealsScreen() {
         "Your meal plan has been saved to your profile."
       );
     } catch (error) {
-      console.error("Error saving meal plan to Firebase:", error);
+      console.error("Error saving meal plan:", error);
       Alert.alert(
         "Error",
         "There was a problem saving your meal plan. Please try again."
@@ -397,7 +398,7 @@ function NutritionMealsScreen() {
           
           <TouchableOpacity 
             style={styles.modalPrimaryButton}
-            onPress={saveMealPlanToFirebase}
+            onPress={saveMealPlanToBackend}
           >
             <Text style={styles.modalPrimaryButtonText}>Save Plan</Text>
           </TouchableOpacity>
@@ -472,9 +473,9 @@ function NutritionMealsScreen() {
                 dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
                 itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="Lose Fat (Protein 40% / Carbs 30% / Fat 30%)" value="loseFat" color={Colors.text} />
-                <Picker.Item label="Maintain Muscle (Protein 30% / Carbs 40% / Fat 30%)" value="maintainMuscle" color={Colors.text} />
-                <Picker.Item label="Build Muscle (Protein 30% / Carbs 50% / Fat 20%)" value="buildMuscle" color={Colors.text} />
+                <Picker.Item label="Lose Fat (Protein 40% / Carbs 30% / Fat 30%)" value="loseFat" color={getPickerItemColor()} />
+                <Picker.Item label="Maintain Muscle (Protein 30% / Carbs 40% / Fat 30%)" value="maintainMuscle" color={getPickerItemColor()} />
+                <Picker.Item label="Build Muscle (Protein 30% / Carbs 50% / Fat 20%)" value="buildMuscle" color={getPickerItemColor()} />
               </Picker>
             </View>
           </View>

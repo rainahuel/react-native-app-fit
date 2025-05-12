@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { 
   Alert, 
-  Button, 
   ScrollView, 
   StyleSheet, 
   Text, 
@@ -17,9 +16,8 @@ import { Picker } from "@react-native-picker/picker";
 import Colors from "../../constants/Colors";
 import methodsConfig from "../../data/workout/methods-config";
 import { useAuth } from "../../context/AuthContext";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase";
 import { useRouter } from "expo-router";
+import workoutService from "../../services/workoutService";
 
 function WorkoutScreen() {
   const router = useRouter();
@@ -92,36 +90,34 @@ function WorkoutScreen() {
 
       // Crear objeto con los datos del plan
       const workoutPlanData = {
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        startDate: serverTimestamp(),
         methodKey: method,
         methodName: methodsConfig[method].name,
         goal: goal,
         level: level,
         daysPerWeek: parseInt(daysPerWeek),
-        progress: {
-          daysCompleted: 0,
-          totalDays: parseInt(daysPerWeek) * 4 // Suponiendo un plan de 4 semanas inicialmente
-        },
-        status: "active"
+        totalDays: parseInt(daysPerWeek) * 4 // Suponiendo un plan de 4 semanas inicialmente
       };
 
-      // Guardar en Firestore
-      const docRef = await addDoc(collection(db, 'workoutPlans'), workoutPlanData);
+      // Guardar en el backend
+      const savedPlan = await workoutService.createWorkoutPlan(workoutPlanData);
 
       setIsSaving(false);
-      Alert.alert(
-        "Success",
-        "Your workout plan has been saved to your profile.",
-        [
-          { 
-            text: "View in Profile", 
-            onPress: () => router.push('/(tabs)/profile')
-          },
-          { text: "OK" }
-        ]
-      );
+      
+      if (savedPlan) {
+        Alert.alert(
+          "Success",
+          "Your workout plan has been saved to your profile.",
+          [
+            { 
+              text: "View in Profile", 
+              onPress: () => router.push('/(tabs)/profile')
+            },
+            { text: "OK" }
+          ]
+        );
+      } else {
+        throw new Error("Failed to save workout plan");
+      }
     } catch (error) {
       console.error("Error saving workout plan:", error);
       setIsSaving(false);
@@ -186,6 +182,16 @@ function WorkoutScreen() {
     </Modal>
   );
 
+  // Corregir el problema de texto blanco sobre fondo blanco
+  const getPickerItemColor = () => {
+    // En iOS y Android, usamos el color del tema
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      return Colors.text;
+    }
+    // En web u otras plataformas, podemos usar otro color si es necesario
+    return Colors.text;
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {renderLoginModal()}
@@ -218,7 +224,7 @@ function WorkoutScreen() {
                 selectedValue={method}
                 onValueChange={(itemValue) => setMethod(itemValue)}
                 style={styles.picker}
-                dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                dropdownIconColor={Colors.text}
                 itemStyle={styles.pickerItem}
               >
                 {methodKeys.map((key) => (
@@ -226,7 +232,7 @@ function WorkoutScreen() {
                     key={key} 
                     label={methodsConfig[key].name} 
                     value={key}
-                    color={Colors.text} 
+                    color={getPickerItemColor()}
                   />
                 ))}
               </Picker>
@@ -240,7 +246,7 @@ function WorkoutScreen() {
                 selectedValue={goal}
                 onValueChange={(itemValue) => setGoal(itemValue)}
                 style={styles.picker}
-                dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                dropdownIconColor={Colors.text}
                 itemStyle={styles.pickerItem}
               >
                 {methodsConfig[method].goals.map((g) => (
@@ -248,7 +254,7 @@ function WorkoutScreen() {
                     key={g} 
                     label={g.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())} 
                     value={g}
-                    color={Colors.text}
+                    color={getPickerItemColor()}
                   />
                 ))}
               </Picker>
@@ -262,11 +268,19 @@ function WorkoutScreen() {
                 selectedValue={level}
                 onValueChange={(itemValue) => setLevel(itemValue)}
                 style={styles.picker}
-                dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                dropdownIconColor={Colors.text}
                 itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="Beginner" value="beginner" color={Colors.text} />
-                <Picker.Item label="Intermediate" value="intermediate" color={Colors.text} />
+                <Picker.Item 
+                  label="Beginner" 
+                  value="beginner" 
+                  color={getPickerItemColor()} 
+                />
+                <Picker.Item 
+                  label="Intermediate" 
+                  value="intermediate" 
+                  color={getPickerItemColor()} 
+                />
               </Picker>
             </View>
           </View>
@@ -278,7 +292,7 @@ function WorkoutScreen() {
                 selectedValue={daysPerWeek}
                 onValueChange={(itemValue) => setDaysPerWeek(itemValue)}
                 style={styles.picker}
-                dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
+                dropdownIconColor={Colors.text}
                 itemStyle={styles.pickerItem}
               >
                 {methodsConfig[method].daysPerWeek.map((num) => (
@@ -286,7 +300,7 @@ function WorkoutScreen() {
                     key={num} 
                     label={`${num} Days`} 
                     value={num.toString()}
-                    color={Colors.text} 
+                    color={getPickerItemColor()}
                   />
                 ))}
               </Picker>

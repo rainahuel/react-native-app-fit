@@ -1,43 +1,10 @@
+// context/AuthContext.tsx
 import React, { ReactNode, createContext, useContext, useState, useEffect } from 'react';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  updateProfile
-} from 'firebase/auth';
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  serverTimestamp, 
-  updateDoc 
-} from 'firebase/firestore';
-import { auth, db } from '../firebase';
-
-type UserData = {
-  displayName?: string;
-  email?: string;
-  createdAt?: string;
-  lastLogin?: string;
-  profile?: {
-    gender?: string;
-    age?: number;
-    height?: number;
-    weight?: number;
-    dailyActivity?: {
-      sleepHours?: number;
-      sittingHours?: number;
-      walkingMinutes?: number;
-      strengthMinutes?: number;
-      cardioMinutes?: number;
-    }
-  }
-};
+import authService, { UserData } from '../services/authService';
 
 type User = {
-  uid: string;
-  email: string | null;
+  _id: string;
+  email: string;
 };
 
 type AuthContextType = {
@@ -68,106 +35,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Escuchar cambios en el estado de autenticación
+  // Verificar estado de autenticación al cargar la app
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsLoading(true);
-      
-      if (firebaseUser) {
-        setIsAuthenticated(true);
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email
-        });
+    const checkAuth = async () => {
+      try {
+        setIsLoading(true);
+        const userDataResponse = await authService.checkAuthStatus();
         
-        // Cargar datos del usuario desde Firestore
-        try {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            setUserData(userDoc.data() as UserData);
-            
-            // Actualizar lastLogin
-            await updateDoc(userDocRef, {
-              lastLogin: serverTimestamp()
-            });
-          } else {
-            console.log("No user data found in Firestore");
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
+        if (userDataResponse) {
+          setIsAuthenticated(true);
+          setUser({
+            _id: userDataResponse._id,
+            email: userDataResponse.email
+          });
+          setUserData(userDataResponse);
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+          setUserData(null);
         }
-      } else {
-        // Usuario no autenticado
+      } catch (error) {
+        console.error('Auth check error:', error);
         setIsAuthenticated(false);
         setUser(null);
         setUserData(null);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
-    });
+    };
 
-    // Limpiar el listener cuando el componente se desmonte
-    return () => unsubscribe();
+    checkAuth();
   }, []);
 
-  // Iniciar sesión con email y contraseña
+  // Iniciar sesión
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userDataResponse = await authService.login({ email, password });
       
-      // La actualización de isAuthenticated y user se manejará en el efecto onAuthStateChanged
-      // Aquí solo actualizamos lastLogin en la base de datos
-      await updateDoc(doc(db, 'users', userCredential.user.uid), {
-        lastLogin: serverTimestamp()
+      setIsAuthenticated(true);
+      setUser({
+        _id: userDataResponse._id,
+        email: userDataResponse.email
       });
+      setUserData(userDataResponse);
       
       console.log('Login successful:', email);
     } catch (error: any) {
-      console.error('Login error:', error.code, error.message);
+      console.error('Login error:', error);
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Registrar un nuevo usuario
+  // Registrar usuario
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
       setIsLoading(true);
-      // Crear cuenta en Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Actualizar el perfil con el displayName
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName });
-      }
-      
-      // Crear documento de usuario en Firestore
-      const newUserData: UserData = {
-        displayName,
+      const userDataResponse = await authService.register({
+        name: displayName,
         email,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        profile: {
-          // Los valores iniciales pueden ser rellenados posteriormente
-          dailyActivity: {
-            sleepHours: 8,
-            sittingHours: 8,
-            walkingMinutes: 30,
-            strengthMinutes: 0,
-            cardioMinutes: 0
-          }
-        }
-      };
+        password
+      });
       
-      await setDoc(doc(db, 'users', userCredential.user.uid), newUserData);
+      setIsAuthenticated(true);
+      setUser({
+        _id: userDataResponse._id,
+        email: userDataResponse.email
+      });
+      setUserData(userDataResponse);
       
       console.log('Registration successful:', email);
     } catch (error: any) {
-      console.error('Registration error:', error.code, error.message);
+      console.error('Registration error:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -177,11 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Cerrar sesión
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
-      // El resto se maneja en el efecto onAuthStateChanged
+      await authService.logout();
+      
+      setIsAuthenticated(false);
+      setUser(null);
+      setUserData(null);
+      
       console.log('Sign out successful');
     } catch (error: any) {
-      console.error('Sign out error:', error.code, error.message);
+      console.error('Sign out error:', error);
       throw error;
     }
   };
@@ -193,13 +138,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, data);
+      const updatedUserData = await authService.updateUserProfile(data);
       
       // Actualizar el estado local
       setUserData(prevData => {
-        if (!prevData) return data as UserData;
-        return { ...prevData, ...data };
+        if (!prevData) return updatedUserData;
+        return { ...prevData, ...updatedUserData };
       });
       
       console.log('User data updated successfully');

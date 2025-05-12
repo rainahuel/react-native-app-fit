@@ -11,12 +11,12 @@ import {
   Alert 
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../firebase';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import mealService from '../../../services/mealService';
 
+// Las interfaces se mantienen iguales
 interface Food {
   name: string;
   type: string;
@@ -39,10 +39,9 @@ interface Meal {
 }
 
 interface MealPlan {
-  id: string;
+  _id: string;
   name: string;
   createdAt: Date;
-  userId: string;
   settings: {
     calories: number;
     mealsPerDay: number;
@@ -79,30 +78,20 @@ export default function MealPlanDetailsScreen() {
       }
 
       try {
-        const mealPlanRef = doc(db, 'mealPlans', id as string);
-        const mealPlanDoc = await getDoc(mealPlanRef);
+        // Obtener el plan de comidas usando nuestro servicio
+        const mealPlanData = await mealService.getMealPlanById(id as string);
         
-        if (mealPlanDoc.exists()) {
-          const data = mealPlanDoc.data();
-          
-          // Verificar que el plan pertenece al usuario actual
-          if (data.userId !== user.uid) {
-            Alert.alert('Error', 'You do not have permission to view this meal plan.');
-            router.back();
-            return;
-          }
-          
-          // Convertir timestamp a Date si es necesario
+        if (mealPlanData) {
+          // Convertir la fecha a objeto Date si viene como string
           let createdAt;
           try {
-            createdAt = data.createdAt?.toDate() || new Date();
+            createdAt = new Date(mealPlanData.createdAt);
           } catch (e) {
             createdAt = new Date();
           }
           
           setMealPlan({
-            id: mealPlanDoc.id,
-            ...data,
+            ...mealPlanData,
             createdAt: createdAt
           } as MealPlan);
         } else {
@@ -133,11 +122,12 @@ export default function MealPlanDetailsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (!mealPlan?.id) return;
+            if (!mealPlan?._id) return;
             
             try {
               setIsDeleting(true);
-              await deleteDoc(doc(db, 'mealPlans', mealPlan.id));
+              // Usar nuestro servicio para eliminar el plan de comidas
+              await mealService.deleteMealPlan(mealPlan._id);
               Alert.alert('Success', 'Meal plan deleted successfully.');
               router.back();
             } catch (error) {
@@ -151,7 +141,7 @@ export default function MealPlanDetailsScreen() {
     );
   };
 
-  // Helper para convertir el nombre del objetivo a texto legible
+  // Helper para convertir el nombre del objetivo a texto legible - no cambia
   const getGoalText = (goal: string) => {
     switch (goal) {
       case 'loseFat':

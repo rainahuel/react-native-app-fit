@@ -57,14 +57,21 @@ function LoginScreen() {
     } catch (error: any) {
       console.error("Login error:", error);
       
-      // Mensajes de error más específicos según el código de error de Firebase
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setMessage("Invalid email or password. Please check your credentials and try again.");
-      } else if (error.code === 'auth/too-many-requests') {
-        setMessage("Too many failed login attempts. Please try again later or reset your password.");
-      } else if (error.code === 'auth/network-request-failed') {
+      // Mensajes de error más específicos según el código de error del servidor
+      if (error.response) {
+        // El servidor respondió con un código de estado diferente de 2xx
+        if (error.response.status === 401) {
+          setMessage("Invalid email or password. Please check your credentials and try again.");
+        } else if (error.response.status === 429) {
+          setMessage("Too many failed login attempts. Please try again later.");
+        } else {
+          setMessage(`Login failed: ${error.response.data.message || "Server error"}`);
+        }
+      } else if (error.request) {
+        // La solicitud fue hecha pero no se recibió respuesta
         setMessage("Network error. Please check your internet connection and try again.");
       } else {
+        // Error en la configuración de la solicitud
         setMessage(`Login failed: ${error.message || "Unknown error"}`);
       }
       
@@ -157,6 +164,7 @@ function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Los estilos se mantienen igual
   container: {
     flex: 1,
     backgroundColor: Colors.background,

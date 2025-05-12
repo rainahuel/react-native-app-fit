@@ -1,7 +1,6 @@
 // app/(auth)/register.tsx
 import React, { useState, useEffect } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,7 +15,7 @@ import { Link, useRouter } from 'expo-router';
 import Colors from '../../constants/Colors';
 import { useAuth } from '../../context/AuthContext';
 import CustomButton from '../../components/CustomButton';
-import MessageBanner from '../../components/MessageBanner'; // Usando el mismo componente del login para consistencia
+import MessageBanner from '../../components/MessageBanner';
 
 function RegisterScreen() {
   const [name, setName] = useState('');
@@ -76,16 +75,27 @@ function RegisterScreen() {
     } catch (error: any) {
       console.error("Registration error:", error);
       
-      // Mensajes específicos según el código de error de Firebase
-      if (error.code === 'auth/email-already-in-use') {
-        setMessage("This email is already registered. Please use a different email or log in.");
-      } else if (error.code === 'auth/invalid-email') {
-        setMessage("Please enter a valid email address.");
-      } else if (error.code === 'auth/weak-password') {
-        setMessage("Password is too weak. Please use a stronger password.");
-      } else if (error.code === 'auth/network-request-failed') {
+      // Mensajes específicos según el código de error del servidor
+      if (error.response) {
+        // El servidor respondió con un código de estado diferente de 2xx
+        if (error.response.status === 400) {
+          if (error.response.data.message?.includes('already exists')) {
+            setMessage("This email is already registered. Please use a different email or log in.");
+          } else if (error.response.data.message?.includes('valid email')) {
+            setMessage("Please enter a valid email address.");
+          } else if (error.response.data.message?.includes('password')) {
+            setMessage("Password is too weak. Please use a stronger password.");
+          } else {
+            setMessage(error.response.data.message || "Invalid registration data.");
+          }
+        } else {
+          setMessage(`Registration failed: ${error.response.data.message || "Server error"}`);
+        }
+      } else if (error.request) {
+        // La solicitud fue hecha pero no se recibió respuesta
         setMessage("Network error. Please check your internet connection and try again.");
       } else {
+        // Error en la configuración de la solicitud
         setMessage(`Registration failed: ${error.message || "Unknown error"}`);
       }
       

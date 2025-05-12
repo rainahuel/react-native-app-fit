@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Colors from '../constants/Colors';
 import { AuthProvider } from '../context/AuthContext';
+import { RefreshProvider } from '../context/RefreshContext';
 
 function RootLayout() {
   const [isLoading, setIsLoading] = useState(true);
@@ -28,35 +29,37 @@ function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontWeight: 'bold' },
-          contentStyle: { backgroundColor: Colors.background },
-          headerShadowVisible: false,
-        }}
-      >
-        <Stack.Screen 
-          name="(tabs)" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="(auth)" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="screen" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="index" 
-          options={{ headerShown: false }} 
-        />
-      </Stack>
-    </AuthProvider>
+    <RefreshProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: Colors.background },
+            headerTintColor: Colors.text,
+            headerTitleStyle: { fontWeight: 'bold' },
+            contentStyle: { backgroundColor: Colors.background },
+            headerShadowVisible: false,
+          }}
+        >
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="(auth)" 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="screen" 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="index" 
+            options={{ headerShown: false }} 
+          />
+        </Stack>
+      </AuthProvider>
+    </RefreshProvider>
   );
 }
 
