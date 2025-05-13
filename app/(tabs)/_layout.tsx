@@ -31,10 +31,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="workouts"
+        name="workout"
         options={{
-          title: 'Workouts',
-          tabBarIcon: ({ color }) => <FontAwesome name="code" size={24} color={color} />,
+          title: 'Workout',
+          tabBarIcon: ({ color }) => <FontAwesome name="heartbeat" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

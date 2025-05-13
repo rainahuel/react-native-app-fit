@@ -15,6 +15,7 @@ import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import mealService from '../../../services/mealService';
+import { useRefreshContext, RefreshableDataType } from '@/context/RefreshContext';
 
 // Las interfaces se mantienen iguales
 interface Food {
@@ -63,6 +64,7 @@ interface MealPlan {
 
 export default function MealPlanDetailsScreen() {
   const { user, isAuthenticated } = useAuth();
+  const { triggerRefresh, triggerMultipleRefresh } = useRefreshContext();
   const router = useRouter();
   const { id } = useLocalSearchParams();
   
@@ -128,6 +130,7 @@ export default function MealPlanDetailsScreen() {
               setIsDeleting(true);
               // Usar nuestro servicio para eliminar el plan de comidas
               await mealService.deleteMealPlan(mealPlan._id);
+              triggerMultipleRefresh(['mealPlans', 'userProfile']);
               Alert.alert('Success', 'Meal plan deleted successfully.');
               router.back();
             } catch (error) {

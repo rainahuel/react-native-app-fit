@@ -14,250 +14,415 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import methodsConfig from '../../../data/workout/methods-config';
 import workoutService from '../../../services/workoutService';
-
-// Interfaces para los datos
-interface Exercise {
-  name: string;
-  sets: number;
-  reps: string;
-  rest: string;
-}
-
-interface WorkoutDay {
-  day: string;
-  focus: string;
-  exercises: Exercise[];
-}
-
-interface WorkoutPlan {
-  _id: string;  // Cambiado de id a _id para MongoDB
-  methodKey: string;
-  methodName: string;
-  goal: string;
-  level: string;
-  daysPerWeek: number;
-  createdAt: any;
-  status: string;
-  progress: {
-    daysCompleted: number;
-    totalDays: number;
-  };
-}
+import methodsConfig from '../../../data/workout/methods-config';
+import { useRefreshContext } from '@/context/RefreshContext';
 
 export default function WorkoutDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = params.id ? String(params.id) : '';
   const { user, isAuthenticated } = useAuth();
+  const { triggerRefresh } = useRefreshContext();
   
   const [isLoading, setIsLoading] = useState(true);
-  const [workoutPlan, setWorkoutPlan] = useState<WorkoutPlan | null>(null);
-  const [routineData, setRoutineData] = useState<WorkoutDay[]>([]);
+  const [workoutPlan, setWorkoutPlan] = useState<any>(null);
+  const [routine, setRoutine] = useState<any[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || !id) {
-      router.push('/(tabs)/workout');
-      return;
-    }
-    
-    const loadWorkoutPlan = async () => {
+    const fetchWorkoutPlan = async () => {
+      if (!isAuthenticated || !id) {
+        setIsLoading(false);
+        return;
+      }
+  
       try {
-        setIsLoading(true);
+        console.log('Fetching workout plan with id:', id);
+        const workoutPlanData = await workoutService.getWorkoutPlanById(id);
         
-        // Obtener el plan de entrenamiento usando nuestro servicio
-        const planData = await workoutService.getWorkoutPlanById(id as string);
-        
-        if (!planData) {
-          Alert.alert("Error", "Workout plan not found.");
-          router.push('/(tabs)/workout');
-          return;
-        }
-        
-        // Convertir string de fecha a objeto Date si es necesario
-        let createdAt;
-        try {
-          createdAt = new Date(planData.createdAt);
-        } catch (e) {
-          createdAt = new Date();
-        }
-        
-        const plan: WorkoutPlan = {
-          ...planData,
-          createdAt
-        } as WorkoutPlan;
-        
-        setWorkoutPlan(plan);
-        
-        // Cargar los datos de la rutina basado en las selecciones guardadas
-        const source = methodsConfig[plan.methodKey].data;
-        if (source) {
-          const routineSet = source[plan.goal]?.[plan.level]?.[plan.daysPerWeek.toString()];
-          if (routineSet) {
-            setRoutineData(routineSet);
+        if (workoutPlanData) {
+          console.log('Workout plan retrieved:', workoutPlanData);
+          setWorkoutPlan(workoutPlanData);
+
+          if (workoutPlanData.routineData && workoutPlanData.routineData.length > 0) {
+            console.log('Using stored routine data');
+            setRoutine(workoutPlanData.routineData);
+          } else {
+            console.log('Reconstructing routine from method config');
+  
+            const methodConfig = methodsConfig[workoutPlanData.methodKey];
+            
+            if (methodConfig && methodConfig.data) {
+              try {
+    
+                const daysPerWeekStr = workoutPlanData.daysPerWeek.toString();
+                
+                console.log(`Looking for routine with params: goal=${workoutPlanData.goal}, level=${workoutPlanData.level}, days=${daysPerWeekStr}`);
+                
+                let routineData;
+                if (methodConfig.data[workoutPlanData.goal]) {
+                  if (methodConfig.data[workoutPlanData.goal][workoutPlanData.level]) {
+                    routineData = methodConfig.data[workoutPlanData.goal][workoutPlanData.level][daysPerWeekStr];
+                  }
+                }
+                
+                console.log('Routine data found:', routineData ? 'Yes' : 'No');
+                
+                if (routineData) {
+                  setRoutine(routineData);
+                } else {
+                  console.warn(`No routine data for ${workoutPlanData.methodKey} with current configuration`);
+                }
+              } catch (error) {
+                console.error('Error generating routine:', error);
+              }
+            } else {
+              console.warn(`Method config not found for ${workoutPlanData.methodKey}`);
+            }
           }
+        } else {
+          Alert.alert('Error', 'Workout plan not found.');
+          router.back();
         }
       } catch (error) {
-        console.error("Error loading workout plan:", error);
-        Alert.alert("Error", "Failed to load workout plan details.");
+        console.error('Error fetching workout plan:', error);
+        Alert.alert('Error', 'Failed to load workout plan details.');
       } finally {
         setIsLoading(false);
       }
     };
     
-    loadWorkoutPlan();
-  }, [id, isAuthenticated, user]);
+    fetchWorkoutPlan();
+  }, [id, isAuthenticated, router]);
 
-  const markDayComplete = async (dayIndex: number) => {
-    if (!workoutPlan || !user) return;
+  const handleUpdateProgress = async () => {
+    if (!workoutPlan) return;
+    
+    const currentProgress = workoutPlan.progress.daysCompleted;
+    let newProgress = currentProgress + 1;
+    
+
+    if (newProgress > workoutPlan.progress.totalDays) {
+      newProgress = workoutPlan.progress.totalDays;
+    }
     
     try {
       setIsUpdating(true);
       
-      // Actualizar el progreso
-      const updatedDaysCompleted = workoutPlan.progress.daysCompleted + 1;
+      await workoutService.updateWorkoutProgress(workoutPlan._id, newProgress);
       
-      // Actualizar en el backend usando nuestro servicio
-      await workoutService.updateWorkoutProgress(workoutPlan._id, updatedDaysCompleted);
-      
-      // Actualizar estado local
-      setWorkoutPlan({
-        ...workoutPlan,
+      // Actualizar el estado local
+      setWorkoutPlan((prevState:any) => ({
+        ...prevState,
         progress: {
-          ...workoutPlan.progress,
-          daysCompleted: updatedDaysCompleted
-        }
-      });
+          ...prevState.progress,
+          daysCompleted: newProgress
+        },
+        status: newProgress >= workoutPlan.progress.totalDays ? 'completed' : 'active'
+      }));
       
-      Alert.alert("Success", "Workout day completed! Keep up the good work!");
+      // Actualizar la lista de planes en el perfil
+      triggerRefresh('workoutPlans');
+      
+      Alert.alert(
+        "Progress Updated",
+        `You've completed ${newProgress} of ${workoutPlan.progress.totalDays} days.`
+      );
     } catch (error) {
-      console.error("Error updating progress:", error);
-      Alert.alert("Error", "Failed to update workout progress.");
+      console.error('Error updating progress:', error);
+      Alert.alert('Error', 'Failed to update workout progress.');
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Función auxiliar para renderizar el texto del objetivo
-  const renderGoalText = (goal: string) => {
-    switch(goal) {
-      case 'loseFat':
-        return 'Fat Loss';
-      case 'maintainMuscle':
-        return 'Maintain Muscle';
-      case 'gainStrength':
-        return 'Gain Strength';
-      case 'buildMuscle':
-        return 'Build Muscle';
-      default:
-        return goal.charAt(0).toUpperCase() + goal.slice(1);
-    }
+  const handleDeleteWorkoutPlan = () => {
+    if (!workoutPlan) return;
+    
+    Alert.alert(
+      "Delete Workout Plan",
+      "Are you sure you want to delete this workout plan? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await workoutService.deleteWorkoutPlan(workoutPlan._id);
+              
+              // Actualizar la lista de planes en el perfil
+              triggerRefresh('workoutPlans');
+              
+              Alert.alert(
+                "Success",
+                "Workout plan deleted successfully."
+              );
+              
+              router.back();
+            } catch (error) {
+              console.error('Error deleting workout plan:', error);
+              Alert.alert('Error', 'Failed to delete workout plan.');
+            }
+          }
+        }
+      ]
+    );
   };
 
-  // El resto del componente (renderizado) permanece sin cambios
-  // Solo necesitamos actualizar las referencias de 'id' a '_id'
 
-  // Mostrar indicador de carga
+  const renderWorkoutRoutine = () => {
+    if (!workoutPlan) return null;
+    
+    // Detectar si la rutina tiene estructura de blocks (HIIT/Tabata)
+    const hasBlocks = routine.length > 0 && routine.some(day => day.blocks && day.blocks.length > 0);
+    
+    // Si es un entrenamiento HIIT/Tabata o tiene estructura de blocks
+    if (workoutPlan.methodKey === 'hiit' || workoutPlan.methodKey === 'tabata' || hasBlocks) {
+      return (
+        <>
+          <Text style={styles.routineTitle}>
+            {workoutPlan.methodName} Workout Routine
+          </Text>
+          
+          {routine.length > 0 ? (
+            routine.map((day, index) => (
+              <View key={index} style={styles.dayContainer}>
+                <View style={styles.dayHeader}>
+                  <Text style={styles.dayTitle}>{day.day || `Day ${index + 1}`}</Text>
+                  <Text style={styles.dayFocus}>{day.focus || 'Training Session'}</Text>
+                </View>
+                
+                {/* Renderizar bloques de HIIT/Tabata si existen */}
+                {day.blocks && day.blocks.length > 0 && (
+                  day.blocks.map((block, blockIndex) => (
+                    <View key={`block-${blockIndex}`}>
+                      {block.name && (
+                        <View style={styles.blockHeader}>
+                          <Text style={styles.blockName}>{block.name}</Text>
+                        </View>
+                      )}
+                      
+                      {block.exercises && block.exercises.map && block.exercises.map((ex, exIndex) => (
+                        <View key={`block-ex-${exIndex}`} style={styles.exerciseRow}>
+                          <Text style={styles.exerciseName}>{ex.name}</Text>
+                          <View style={styles.exerciseDetails}>
+                            {ex.rounds && <Text style={styles.exerciseDetail}>Rounds: {ex.rounds}</Text>}
+                            {ex.work && <Text style={styles.exerciseDetail}>Work: {ex.work}</Text>}
+                            {ex.rest && <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))
+                )}
+                
+                {/* Renderizar ejercicios estándar (para el caso de que la rutina HIIT no tenga bloques) */}
+                {!day.blocks && day.exercises && day.exercises.map && (
+                  day.exercises.map((ex, i) => (
+                    <View key={i} style={styles.exerciseRow}>
+                      <Text style={styles.exerciseName}>{ex.name}</Text>
+                      <View style={styles.exerciseDetails}>
+                        {ex.sets && <Text style={styles.exerciseDetail}>Sets: {ex.sets}</Text>}
+                        {ex.reps && <Text style={styles.exerciseDetail}>Reps: {ex.reps}</Text>}
+                        {ex.duration && <Text style={styles.exerciseDetail}>Duration: {ex.duration}</Text>}
+                        {ex.rest && <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>}
+                        {ex.intensity && <Text style={styles.exerciseDetail}>Intensity: {ex.intensity}</Text>}
+                      </View>
+                    </View>
+                  ))
+                )}
+                
+                {/* Renderizar detalles para HIIT genérico */}
+                {day.details && (
+                  <View style={styles.exerciseRow}>
+                    <View style={styles.hiitDetailsContainer}>
+                      {day.details.intervals && (
+                        <Text style={styles.hiitDetailItem}>
+                          <Text style={styles.hiitDetailLabel}>Intervals:</Text> {day.details.intervals}
+                        </Text>
+                      )}
+                      {day.details.work && (
+                        <Text style={styles.hiitDetailItem}>
+                          <Text style={styles.hiitDetailLabel}>Work:</Text> {day.details.work}
+                        </Text>
+                      )}
+                      {day.details.rest && (
+                        <Text style={styles.hiitDetailItem}>
+                          <Text style={styles.hiitDetailLabel}>Rest:</Text> {day.details.rest}
+                        </Text>
+                      )}
+                      {day.details.totalTime && (
+                        <Text style={styles.hiitDetailItem}>
+                          <Text style={styles.hiitDetailLabel}>Total Time:</Text> {day.details.totalTime}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
+            ))
+          ) : (
+            <View style={styles.noRoutineContainer}>
+              <Text style={styles.noRoutineText}>
+                No detailed routine data available for this workout plan.
+              </Text>
+              
+              <View style={styles.hiitGuideContainer}>
+                <Text style={styles.hiitGuideTitle}>General HIIT Guidelines:</Text>
+                <Text style={styles.hiitGuideText}>• Warm up for 5-10 minutes</Text>
+                <Text style={styles.hiitGuideText}>• Perform high-intensity intervals (85-95% max effort)</Text>
+                <Text style={styles.hiitGuideText}>• Rest between intervals</Text>
+                <Text style={styles.hiitGuideText}>• Complete your target number of intervals</Text>
+                <Text style={styles.hiitGuideText}>• Cool down for 5-10 minutes</Text>
+              </View>
+            </View>
+          )}
+        </>
+      );
+    }
+    
+    // Para otros tipos de entrenamiento (como Helms), usar el renderizado estándar
+    return (
+      <>
+        <Text style={styles.routineTitle}>Workout Routine</Text>
+        
+        {routine.length > 0 ? (
+          routine.map((day, index) => (
+            <View key={index} style={styles.dayContainer}>
+              <View style={styles.dayHeader}>
+                <Text style={styles.dayTitle}>{day.day}</Text>
+                <Text style={styles.dayFocus}>{day.focus}</Text>
+              </View>
+              {day.exercises && day.exercises.map(
+                (ex, i) => (
+                  <View key={i} style={styles.exerciseRow}>
+                    <Text style={styles.exerciseName}>{ex.name}</Text>
+                    <View style={styles.exerciseDetails}>
+                      <Text style={styles.exerciseDetail}>Sets: {ex.sets}</Text>
+                      <Text style={styles.exerciseDetail}>Reps: {ex.reps}</Text>
+                      <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>
+                    </View>
+                  </View>
+                )
+              )}
+            </View>
+          ))
+        ) : (
+          <View style={styles.noRoutineContainer}>
+            <Text style={styles.noRoutineText}>
+              No routine data available for this workout plan.
+            </Text>
+          </View>
+        )}
+      </>
+    );
+  };
+
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading workout plan...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading workout plan...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // Si no se encontró el plan
   if (!workoutPlan) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <Text style={styles.errorText}>Workout plan not found</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.push('/(tabs)/workout')}
-        >
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={60} color={Colors.primary} />
+          <Text style={styles.errorText}>Workout plan not found</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollContainer}>
-        {/* Cabecera del plan */}
-        <View style={styles.headerContainer}>
-          <View style={styles.headerContent}>
-            <Text style={styles.planTitle}>{workoutPlan.methodName}</Text>
-            <Text style={styles.planSubtitle}>
-              {renderGoalText(workoutPlan.goal)} • {workoutPlan.level.charAt(0).toUpperCase() + workoutPlan.level.slice(1)} • {workoutPlan.daysPerWeek} days/week
-            </Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.backIcon}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={24} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
-        
-        {/* Barra de progreso */}
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressTitle}>Progress</Text>
-          <View style={styles.progressBarContainer}>
-            <View style={styles.progressBarOuter}>
-              <View 
-                style={[
-                  styles.progressBarInner, 
-                  { 
-                    width: `${(workoutPlan.progress.daysCompleted / workoutPlan.progress.totalDays) * 100}%` 
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-          <Text style={styles.progressText}>
-            {workoutPlan.progress.daysCompleted} of {workoutPlan.progress.totalDays} days completed
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{workoutPlan.methodName}</Text>
+          <Text style={styles.date}>
+            Created on {new Date(workoutPlan.createdAt).toLocaleDateString()}
           </Text>
         </View>
         
-        {/* Lista de días de entrenamiento */}
-        <View style={styles.workoutDaysContainer}>
-          <Text style={styles.sectionTitle}>Workout Schedule</Text>
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionTitle}>Plan Summary</Text>
           
-          {routineData.map((day, index) => (
-            <View key={index} style={styles.dayContainer}>
-              <View style={styles.dayHeader}>
-                <View>
-                  <Text style={styles.dayTitle}>{day.day}</Text>
-                  <Text style={styles.dayFocus}>{day.focus}</Text>
-                </View>
-                
-                <TouchableOpacity 
-                  style={styles.completeButton}
-                  onPress={() => markDayComplete(index)}
-                  disabled={isUpdating}
-                >
-                  <Text style={styles.completeButtonText}>
-                    {isUpdating ? "Updating..." : "Mark Complete"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              
-              {day.exercises.map((exercise, i) => (
-                <View key={i} style={styles.exerciseRow}>
-                  <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  <View style={styles.exerciseDetails}>
-                    <Text style={styles.exerciseDetail}>Sets: {exercise.sets}</Text>
-                    <Text style={styles.exerciseDetail}>Reps: {exercise.reps}</Text>
-                    <Text style={styles.exerciseDetail}>Rest: {exercise.rest}</Text>
-                  </View>
-                </View>
-              ))}
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Goal</Text>
+              <Text style={styles.summaryValue}>
+                {workoutPlan.goal === 'loseFat' ? 'Fat Loss' :
+                  workoutPlan.goal === 'maintainMuscle' ? 'Maintain Muscle' :
+                    workoutPlan.goal === 'gainStrength' ? 'Gain Strength' :
+                      workoutPlan.goal === 'buildMuscle' ? 'Build Muscle' : 'Custom'}
+              </Text>
             </View>
-          ))}
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Level</Text>
+              <Text style={styles.summaryValue}>
+                {workoutPlan.level.charAt(0).toUpperCase() + workoutPlan.level.slice(1)}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Days per Week</Text>
+              <Text style={styles.summaryValue}>{workoutPlan.daysPerWeek}</Text>
+            </View>
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Progress</Text>
+              <Text style={styles.summaryValue}>
+                {workoutPlan.progress.daysCompleted} of {workoutPlan.progress.totalDays} days
+              </Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity 
+            style={[
+              styles.progressButton, 
+              workoutPlan.progress.daysCompleted >= workoutPlan.progress.totalDays 
+                ? styles.progressButtonDisabled 
+                : {}
+            ]}
+            onPress={handleUpdateProgress}
+            disabled={workoutPlan.progress.daysCompleted >= workoutPlan.progress.totalDays || isUpdating}
+          >
+            <Text style={styles.progressButtonText}>
+              {isUpdating ? "Updating..." : 
+                workoutPlan.progress.daysCompleted >= workoutPlan.progress.totalDays ? 
+                  "Program Completed" : 
+                  "Complete Workout Day"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {renderWorkoutRoutine()}
+        
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={handleDeleteWorkoutPlan}
+          >
+            <Ionicons name="trash-outline" size={18} color={Colors.white} />
+            <Text style={styles.deleteButtonText}>Delete Plan</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -269,106 +434,124 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  centerContent: {
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  scrollContainer: {
-    flex: 1,
   },
   loadingText: {
     color: Colors.textSecondary,
     marginTop: 12,
     fontSize: 16,
   },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   errorText: {
     color: Colors.white,
     fontSize: 18,
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 24,
   },
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
+  backButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  header: {
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
-  headerContent: {
-    flex: 1,
-    marginLeft: 30, // Espacio para el botón de retroceso
-  },
-  backIcon: {
-    position: 'absolute',
-    left: 16,
-    top: 16,
-  },
-  planTitle: {
+  title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: Colors.white,
     marginBottom: 4,
   },
-  planSubtitle: {
+  date: {
     fontSize: 14,
     color: Colors.textSecondary,
   },
-  progressContainer: {
-    padding: 16,
-    marginBottom: 16,
-  },
-  progressTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 10,
-  },
-  progressBarContainer: {
-    marginBottom: 10,
-  },
-  progressBarOuter: {
-    height: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  progressBarInner: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-  },
-  progressText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-  workoutDaysContainer: {
+  summaryCard: {
+    margin: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
     padding: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.white,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  summaryItem: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.white,
+  },
+  progressButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  progressButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  progressButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  routineTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
   },
   dayContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
-    marginBottom: 16,
     overflow: 'hidden',
   },
   dayHeader: {
     backgroundColor: Colors.primary,
     padding: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   dayTitle: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     color: Colors.white,
   },
   dayFocus: {
@@ -376,21 +559,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 2,
   },
-  completeButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  completeButtonText: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   exerciseRow: {
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 12,
   },
   exerciseName: {
     fontSize: 16,
@@ -398,26 +570,96 @@ const styles = StyleSheet.create({
     color: Colors.white,
     marginBottom: 4,
   },
+  exerciseDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
   exerciseDetails: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     flexWrap: 'wrap',
   },
   exerciseDetail: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginRight: 8,
+    marginRight: 16,
+    marginBottom: 4,
   },
-  backButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+  noRoutineContainer: {
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    alignItems: 'center',
+  },
+  noRoutineText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  hiitGuideContainer: {
+    width: '100%',
+    marginTop: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: 16,
     borderRadius: 8,
-    marginTop: 16,
   },
-  backButtonText: {
+  hiitGuideTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginBottom: 10,
+  },
+  hiitGuideText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  actionsContainer: {
+    margin: 16,
+    marginTop: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#FF4136', // Rojo para acción destructiva
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
     color: Colors.white,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  blockHeader: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 8,
+    paddingHorizontal: 12,
+  },
+  blockName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  hiitDetailItem: {
+    fontSize: 14,
+    color: Colors.white,
+    marginBottom: 6,
+  },
+  hiitDetailLabel: {
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  hiitDetailsContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 4,
   },
 });

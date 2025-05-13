@@ -73,7 +73,7 @@ interface WorkoutPlan {
 export default function ProfileScreen() {
     const router = useRouter();
     const { user, userData, signOut, isAuthenticated, isLoading } = useAuth();
-    const { refreshCounters } = useRefreshContext();
+    const { refreshCounters, triggerRefresh } = useRefreshContext();
 
     // Usar el hook useRefreshableData para cada tipo de datos
     const {
@@ -176,10 +176,8 @@ export default function ProfileScreen() {
         }
     }, [workoutPlansData]);
 
-    // Determinar si algún dato está cargando
     const isLoadingUserData = isLoadingNutrition || isLoadingMeals || isLoadingWorkouts;
 
-    // Función para manejar el cierre de sesión
     const handleLogout = async () => {
         Alert.alert(
             "Logout",
@@ -199,6 +197,44 @@ export default function ProfileScreen() {
                         } catch (error) {
                             console.error("Error signing out:", error);
                             Alert.alert("Error", "Failed to log out. Please try again.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+
+    // Añadir antes del return del componente ProfileScreen
+    const handleDeleteWorkoutPlan = (planId: string) => {
+        Alert.alert(
+            "Delete Workout Plan",
+            "Are you sure you want to delete this workout plan? This action cannot be undone.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await workoutService.deleteWorkoutPlan(planId);
+
+                            // Actualizar los planes de entrenamiento en el perfil
+                            triggerRefresh('workoutPlans');
+
+                            Alert.alert(
+                                "Success",
+                                "Workout plan deleted successfully."
+                            );
+                        } catch (error) {
+                            console.error("Error deleting workout plan:", error);
+                            Alert.alert(
+                                "Error",
+                                "Failed to delete the workout plan. Please try again."
+                            );
                         }
                     }
                 }
@@ -532,10 +568,17 @@ export default function ProfileScreen() {
                                     style={styles.viewDetailButton}
                                     onPress={() => router.push({
                                         pathname: '/screen/workouts/workout-details',
-                                        params: { id: plan.id }
+                                        params: { id: plan._id || plan.id }
                                     })}
                                 >
                                     <Text style={styles.viewDetailButtonText}>View Workout</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={() => handleDeleteWorkoutPlan(plan.id)}
+                                >
+                                    <Text style={styles.deleteButtonText}>Delete</Text>
                                 </TouchableOpacity>
                             </View>
                         ))}
@@ -939,5 +982,23 @@ const styles = StyleSheet.create({
         color: Colors.white,
         fontSize: 16,
         marginLeft: 12,
+    },
+    planButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 10,
+    },
+    deleteButton: {
+        backgroundColor: 'rgba(255, 59, 48, 0.6)',  // Rojo con transparencia
+        paddingVertical: 8,
+        borderRadius: 6,
+        alignItems: 'center',
+        flex: 1,
+        marginLeft: 5,
+    },
+    deleteButtonText: {
+        fontSize: 14,
+        color: Colors.white,
+        fontWeight: '600',
     },
 });

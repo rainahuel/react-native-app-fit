@@ -11,10 +11,9 @@ function RootLayout() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simular un tiempo de carga o inicialización
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2000); // 2 segundos de splash screen
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, []);

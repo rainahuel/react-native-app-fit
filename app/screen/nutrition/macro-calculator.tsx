@@ -19,6 +19,7 @@ import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import nutritionService from '@/services/nutritionService';
+import { useRefreshContext, RefreshableDataType } from '../../../context/RefreshContext';
 
 interface MacroResult {
   proteinGrams: number;
@@ -32,6 +33,7 @@ interface MacroResult {
 
 function MacroCalculatorScreen() {
   const { user, userData, isAuthenticated } = useAuth();
+  const { triggerMultipleRefresh } = useRefreshContext();
   const router = useRouter();
   
   const [weight, setWeight] = useState('');
@@ -113,13 +115,13 @@ function MacroCalculatorScreen() {
       fatPerKg = 1.2;
     }
   
-    const proteinGrams = Math.round(w * proteinPerKg);
-    const fatGrams = Math.round(w * fatPerKg);
-    const proteinCals = proteinGrams * 4;
-    const fatCals = fatGrams * 9;
+    const proteinGrams = Math.floor(w * proteinPerKg); 
+    const fatGrams = Math.floor(w * fatPerKg); 
+    const proteinCals = Math.floor(proteinGrams * 4);
+    const fatCals = Math.floor(fatGrams * 9);
   
     const remainingCals = cal - (proteinCals + fatCals);
-    const carbGrams = Math.round(remainingCals / 4);
+    const carbGrams = Math.floor(remainingCals / 4);
   
     const macroResult = {
       proteinGrams,
@@ -166,9 +168,9 @@ function MacroCalculatorScreen() {
 
       // Calcular porcentajes para macros
       const totalCals = macroResult.calories;
-      const proteinPercentage = Math.round((macroResult.proteinCals / totalCals) * 100);
-      const carbsPercentage = Math.round((macroResult.carbCals / totalCals) * 100);
-      const fatPercentage = Math.round((macroResult.fatCals / totalCals) * 100);
+      const proteinPercentage = Math.floor((macroResult.proteinCals / totalCals) * 100);
+      const carbsPercentage = Math.floor((macroResult.carbCals / totalCals) * 100);
+      const fatPercentage = Math.floor((macroResult.fatCals / totalCals) * 100);
 
       const macroDistribution = {
         protein: { 
@@ -206,6 +208,8 @@ function MacroCalculatorScreen() {
         
         await nutritionService.createNutritionGoal(newGoalData);
       }
+
+      triggerMultipleRefresh(['nutritionGoals', 'userProfile']);
       
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -226,9 +230,14 @@ function MacroCalculatorScreen() {
   };
 
   const getPickerItemColor = () => {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    // En iOS y Android, usamos el color del tema
+    if (Platform.OS === 'ios' ) {
       return Colors.text;
     }
+    if (Platform.OS === 'android') {
+      return '#000000';
+    }
+    // En web u otras plataformas, podemos usar otro color si es necesario
     return Colors.text;
   };
 

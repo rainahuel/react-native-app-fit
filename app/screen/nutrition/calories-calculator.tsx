@@ -1,11 +1,11 @@
 // app/screen/nutrition/calories-calculator.tsx
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  ScrollView, 
-  TextInput, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TextInput,
   TouchableOpacity,
   Alert,
   SafeAreaView,
@@ -19,6 +19,7 @@ import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import nutritionService from '../../../services/nutritionService';
+import { useRefreshContext, RefreshableDataType } from '../../../context/RefreshContext';
 
 interface ResultData {
   bmr: number;
@@ -35,7 +36,8 @@ interface ChartEntry {
 function CaloriesCalculatorScreen() {
   const { user, userData, isAuthenticated, updateUserData } = useAuth();
   const router = useRouter();
-  
+  const { triggerMultipleRefresh } = useRefreshContext();
+
   const [formData, setFormData] = useState({
     age: '',
     weight: '',
@@ -83,68 +85,70 @@ function CaloriesCalculatorScreen() {
     const w = parseFloat(weight);
     const h = parseFloat(height);
     const a = parseInt(age);
-  
+
     const sleepHours = parseFloat(sleep) || 0;
     const sittingHours = parseFloat(sitting) || 0;
     const walkingMinutes = parseFloat(walking) || 0;
     const strengthMinutes = parseFloat(strength) || 0;
     const cardioMinutes = parseFloat(cardio) || 0;
-  
+
     if (!w || !h || !a) {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
-  
+
     const walkingHours = walkingMinutes / 60;
     const strengthHours = strengthMinutes / 60;
     const cardioHours = cardioMinutes / 60;
-  
-    const bmr = gender === "male"
+
+    const bmr = Math.floor(gender === "male"
       ? 10 * w + 6.25 * h - 5 * a + 5
-      : 10 * w + 6.25 * h - 5 * a - 161;
-  
-    const sleepCalories = sleepHours * w * 0.95;
-    const sittingCalories = sittingHours * w * 1.3;
-    const walkingCalories = walkingHours * w * 3.5;
-    const strengthCalories = strengthHours * w * 6.5;
-    const cardioCalories = cardioHours * w * 9;
-  
-    const tdee = bmr + sleepCalories + sittingCalories + walkingCalories + strengthCalories + cardioCalories;
-  
+      : 10 * w + 6.25 * h - 5 * a - 161);
+
+    const sleepCalories = Math.floor(sleepHours * w * 0.95);
+    const sittingCalories = Math.floor(sittingHours * w * 1.3);
+    const walkingCalories = Math.floor(walkingHours * w * 3.5);
+    const strengthCalories = Math.floor(strengthHours * w * 6.5);
+    const cardioCalories = Math.floor(cardioHours * w * 9);
+
+
+
+    const tdee = Math.floor(bmr + sleepCalories + sittingCalories + walkingCalories + strengthCalories + cardioCalories);
+
     let calories = tdee;
     let kcalDiff = 0;
-  
+
     if (goal === "deficit") {
-      calories = tdee * 0.85;
+      calories = Math.floor(tdee * 0.85);
       kcalDiff = tdee - calories;
     } else if (goal === "aggressiveDeficit") {
-      calories = tdee * 0.80;
+      calories = Math.floor(tdee * 0.80);
       kcalDiff = tdee - calories;
     } else if (goal === "surplus") {
-      calories = tdee * 1.1;
+      calories = Math.floor(tdee * 1.1);
       kcalDiff = calories - tdee;
     }
-  
-    const kgPerWeek = kcalDiff > 0 ? +(kcalDiff * 7 / 7700).toFixed(2) : 0;
-  
+
+    const kgPerWeek = kcalDiff > 0 ? Math.floor(kcalDiff * 7 / 7700 * 100) / 100 : 0;
+
     const calculationResult = {
-      bmr: Math.round(bmr),
-      tdee: Math.round(tdee),
-      calories: Math.round(calories),
+      bmr: Math.floor(bmr),
+      tdee: Math.floor(tdee),
+      calories: Math.floor(calories),
       kgPerWeek,
     };
-    
+
     setResult(calculationResult);
-  
+
     setChartData([
-      { label: "BMR", calories: Math.round(bmr) },
-      { label: "Sleep", calories: Math.round(sleepCalories) },
-      { label: "Sitting", calories: Math.round(sittingCalories) },
-      { label: "Walking", calories: Math.round(walkingCalories) },
-      { label: "Strength", calories: Math.round(strengthCalories) },
-      { label: "Cardio", calories: Math.round(cardioCalories) },
+      { label: "BMR", calories: Math.floor(bmr) },
+      { label: "Sleep", calories: Math.floor(sleepCalories) },
+      { label: "Sitting", calories: Math.floor(sittingCalories) },
+      { label: "Walking", calories: Math.floor(walkingCalories) },
+      { label: "Strength", calories: Math.floor(strengthCalories) },
+      { label: "Cardio", calories: Math.floor(cardioCalories) },
     ]);
-    
+
     // If the user is not authenticated, show the login modal
     if (!isAuthenticated && result) {
       setShowLoginModal(true);
@@ -207,20 +211,22 @@ function CaloriesCalculatorScreen() {
           goalType: formData.goal,
           estimatedWeeklyChange: resultData.kgPerWeek,
           components: {
-            sleep: Math.round(parseFloat(formData.sleep) * parseFloat(formData.weight) * 0.95) || 0,
-            sitting: Math.round(parseFloat(formData.sitting) * parseFloat(formData.weight) * 1.3) || 0,
-            walking: Math.round((parseFloat(formData.walking) / 60) * parseFloat(formData.weight) * 3.5) || 0,
-            strength: Math.round((parseFloat(formData.strength) / 60) * parseFloat(formData.weight) * 6.5) || 0,
-            cardio: Math.round((parseFloat(formData.cardio) / 60) * parseFloat(formData.weight) * 9) || 0
+            sleep: Math.floor(parseFloat(formData.sleep) * parseFloat(formData.weight) * 0.95) || 0,
+            sitting: Math.floor(parseFloat(formData.sitting) * parseFloat(formData.weight) * 1.3) || 0,
+            walking: Math.floor((parseFloat(formData.walking) / 60) * parseFloat(formData.weight) * 3.5) || 0,
+            strength: Math.floor((parseFloat(formData.strength) / 60) * parseFloat(formData.weight) * 6.5) || 0,
+            cardio: Math.floor((parseFloat(formData.cardio) / 60) * parseFloat(formData.weight) * 9) || 0
           }
         }
       };
 
       await nutritionService.createNutritionGoal(nutritionGoalData);
-      
+
+      triggerMultipleRefresh(['nutritionGoals', 'userProfile']);
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-      
+
       Alert.alert(
         "Success",
         "Your calorie calculation has been saved to your profile."
@@ -239,8 +245,11 @@ function CaloriesCalculatorScreen() {
   // Similar function to getPickerItemColor from WorkoutScreen to fix the white-on-white issue
   const getPickerItemColor = () => {
     // En iOS y Android, usamos el color del tema
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    if (Platform.OS === 'ios') {
       return Colors.text;
+    }
+    if (Platform.OS === 'android') {
+      return '#000000';
     }
     // En web u otras plataformas, podemos usar otro color si es necesario
     return Colors.text;
@@ -265,36 +274,36 @@ function CaloriesCalculatorScreen() {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalCloseButton}
             onPress={() => setShowLoginModal(false)}
           >
             <Ionicons name="close" size={24} color={Colors.white} />
           </TouchableOpacity>
-          
+
           <Ionicons name="save-outline" size={50} color={Colors.primary} style={styles.modalIcon} />
-          
+
           <Text style={styles.modalTitle}>Save Your Results</Text>
-          
+
           <Text style={styles.modalText}>
             Create an account or sign in to save your calorie calculation and track your progress over time.
           </Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.modalPrimaryButton}
             onPress={handleLoginRedirect}
           >
             <Text style={styles.modalPrimaryButtonText}>Log In</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.modalSecondaryButton}
             onPress={handleRegisterRedirect}
           >
             <Text style={styles.modalSecondaryButtonText}>Create Account</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             onPress={() => setShowLoginModal(false)}
           >
             <Text style={styles.modalCancelText}>Maybe Later</Text>
@@ -308,14 +317,14 @@ function CaloriesCalculatorScreen() {
     <View style={styles.formGroup}>
       <Text style={styles.label}>
         {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
-        {name === 'walking' || name === 'strength' || name === 'cardio' 
-          ? ' (mins/day)' 
-          : name === 'sleep' || name === 'sitting' 
-            ? ' (hrs/day)' 
-            : name === 'height' 
-              ? ' (cm)' 
-              : name === 'weight' 
-                ? ' (kg)' 
+        {name === 'walking' || name === 'strength' || name === 'cardio'
+          ? ' (mins/day)'
+          : name === 'sleep' || name === 'sitting'
+            ? ' (hrs/day)'
+            : name === 'height'
+              ? ' (cm)'
+              : name === 'weight'
+                ? ' (kg)'
                 : ''}
       </Text>
       <View style={styles.inputContainer}>
@@ -334,21 +343,21 @@ function CaloriesCalculatorScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       {renderLoginModal()}
-      
+
       {isSaving && (
         <View style={styles.savingOverlay}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.savingText}>Saving...</Text>
         </View>
       )}
-      
+
       {saveSuccess && (
         <View style={styles.saveSuccess}>
           <Ionicons name="checkmark-circle" size={24} color="white" />
           <Text style={styles.saveSuccessText}>Saved successfully!</Text>
         </View>
       )}
-      
+
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.headerContainer}>
           <Text style={styles.title}>Calorie Calculator</Text>
@@ -360,7 +369,7 @@ function CaloriesCalculatorScreen() {
             {renderInputField('age', 'Years')}
             {renderInputField('weight', 'Kilograms')}
           </View>
-          
+
           <View style={styles.formRow}>
             {renderInputField('height', 'Centimeters')}
             <View style={styles.formGroup}>
@@ -387,12 +396,12 @@ function CaloriesCalculatorScreen() {
             {renderInputField('sleep', 'Hours sleeping')}
             {renderInputField('sitting', 'Hours sitting')}
           </View>
-          
+
           <View style={styles.formRow}>
             {renderInputField('walking', 'Minutes walking')}
             {renderInputField('strength', 'Minutes strength training')}
           </View>
-          
+
           <View style={styles.formRow}>
             {renderInputField('cardio', 'Minutes cardio')}
             <View style={styles.formGroup}>
@@ -423,22 +432,22 @@ function CaloriesCalculatorScreen() {
           <View style={styles.resultsContainer}>
             <View style={styles.resultCard}>
               <Text style={styles.resultCardTitle}>Your Calorie Results</Text>
-              
+
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>BMR:</Text>
                 <Text style={styles.resultValue}>{result.bmr} kcal</Text>
               </View>
-              
+
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>TDEE (based on your routine):</Text>
                 <Text style={styles.resultValue}>{result.tdee} kcal</Text>
               </View>
-              
+
               <View style={styles.highlightRow}>
                 <Text style={styles.highlightLabel}>Recommended Intake:</Text>
                 <Text style={styles.highlightValue}>{result.calories} kcal/day</Text>
               </View>
-              
+
               {formData.goal !== "maintenance" && (
                 <>
                   <View style={styles.resultRow}>
@@ -447,7 +456,7 @@ function CaloriesCalculatorScreen() {
                     </Text>
                     <Text style={styles.resultValue}>{result.kgPerWeek} kg/week</Text>
                   </View>
-                  
+
                   {formData.goal === "aggressiveDeficit" && (
                     <View style={styles.warningContainer}>
                       <Text style={styles.warningText}>
@@ -455,15 +464,15 @@ function CaloriesCalculatorScreen() {
                       </Text>
                     </View>
                   )}
-                  
+
                   <Text style={styles.infoText}>
                     Use this calorie target for the next 2 weeks and then recalculate based on your progress.
                   </Text>
                 </>
               )}
-              
+
               {!isAuthenticated && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.saveResultsButton}
                   onPress={() => setShowLoginModal(true)}
                 >
@@ -471,9 +480,9 @@ function CaloriesCalculatorScreen() {
                   <Text style={styles.saveResultsButtonText}>Save Results</Text>
                 </TouchableOpacity>
               )}
-              
+
               {isAuthenticated && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.saveResultsButton}
                   onPress={() => saveResultsToBackend(result)}
                   disabled={isSaving}
@@ -485,7 +494,7 @@ function CaloriesCalculatorScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            
+
             <Text style={styles.disclaimerText}>
               ⚠️ This result is an approximation based on the Mifflin-St Jeor Equation and energy expenditure estimates from published averages. Results may vary depending on genetics, metabolism, and lifestyle.
             </Text>

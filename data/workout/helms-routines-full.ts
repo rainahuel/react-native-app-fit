@@ -1,30 +1,32 @@
 interface Exercise {
-    name: string;
-    sets: number;
-    reps: string;
-    rest: string;
-  }
-  
-  interface WorkoutDay {
-    day: string;
-    focus: string;
-    exercises: Exercise[];
-  }
-  
-  type ExperienceLevel = "beginner" | "intermediate";
-  type Goal = "loseFat" | "maintainMuscle" | "gainStrength" | "buildMuscle";
-  
-  interface GoalData {
-    [level in ExperienceLevel]: {
-      [days: number]: WorkoutDay[];
-    };
-  }
-  
-  export interface HelmsData {
-    helms: {
-      [goal in Goal]: GoalData;
-    };
-  }
+  name: string;
+  sets: number;
+  reps: string;
+  rest: string;
+}
+
+interface WorkoutDay {
+  day: string;
+  focus: string;
+  exercises: Exercise[];
+}
+
+type ExperienceLevel = 'beginner' | 'intermediate';
+type Goal = 'loseFat' | 'maintainMuscle' | 'gainStrength' | 'buildMuscle';
+
+interface ExperienceLevelData {
+  beginner?: { [days: number]: WorkoutDay[] };
+  intermediate?: { [days: number]: WorkoutDay[] };
+}
+
+export interface HelmsData {
+  helms: {
+    loseFat?: ExperienceLevelData;
+    maintainMuscle?: ExperienceLevelData;
+    gainStrength?: ExperienceLevelData;
+    buildMuscle?: ExperienceLevelData;
+  };
+}
 
 const helmsData: HelmsData = {
     helms: {

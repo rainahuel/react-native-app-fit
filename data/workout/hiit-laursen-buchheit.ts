@@ -1,30 +1,34 @@
- interface HiitExercise {
+interface HiitExercise {
   name: string;
   work: string;
   rest: string;
   rounds: number;
 }
 
- interface HiitBlock {
+interface HiitBlock {
   name: string;
   exercises: HiitExercise[];
 }
 
- interface HiitWorkoutDay {
+interface HiitWorkoutDay {
   day: string;
   focus: string;
   blocks: HiitBlock[];
 }
 
- type ExperienceLevel = 'beginner' | 'intermediate';
- type Goal = 'loseFat';
+type ExperienceLevel = 'beginner' | 'intermediate';
+type Goal = 'loseFat';
 
- interface HiitGoalData {
-  [level in ExperienceLevel]?: {
-    [days: number]: HiitWorkoutDay[];
-  };
+interface HiitGoalData {
+  beginner?: { [days: number]: HiitWorkoutDay[] };
+  intermediate?: { [days: number]: HiitWorkoutDay[] };
 }
 
+export interface HiitData {
+  hiit: {
+    loseFat: HiitGoalData;
+  };
+}
 export interface HiitData {
   hiit: {
     [goal in Goal]: HiitGoalData;

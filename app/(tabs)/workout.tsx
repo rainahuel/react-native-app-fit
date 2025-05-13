@@ -1,11 +1,11 @@
 // app/(tabs)/workout.tsx
 import React, { useEffect, useState } from "react";
-import { 
-  Alert, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  View, 
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
   SafeAreaView,
   Platform,
   TouchableOpacity,
@@ -18,10 +18,12 @@ import methodsConfig from "../../data/workout/methods-config";
 import { useAuth } from "../../context/AuthContext";
 import { useRouter } from "expo-router";
 import workoutService from "../../services/workoutService";
+import { useRefreshContext, RefreshableDataType } from '../../context/RefreshContext';
 
 function WorkoutScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const { triggerMultipleRefresh } = useRefreshContext();
   const methodKeys = Object.keys(methodsConfig);
   const [method, setMethod] = useState(methodKeys[0]);
   const [goal, setGoal] = useState(methodsConfig[method].defaultGoal);
@@ -45,37 +47,140 @@ function WorkoutScreen() {
   };
 
   const generateRoutine = () => {
+    // Log detailed information for debugging
+    console.log(`Generating routine for: Method=${method}, Goal=${goal}, Level=${level}, Days=${daysPerWeek}`);
+    console.log(`Method config:`, methodsConfig[method]);
+
     // Generar rutina basada en las selecciones del usuario
     const source = methodsConfig[method].data;
-    const routineSet = source?.[goal]?.[level]?.[daysPerWeek];
 
-    if (routineSet) {
-      setRoutine(routineSet);
-      
-      // Si el usuario está autenticado, preguntar si quiere guardar la rutina
-      if (isAuthenticated) {
-        Alert.alert(
-          "Routine Generated",
-          "Do you want to save this workout plan to your profile?",
-          [
-            { text: "Not Now", style: "cancel" },
-            { text: "Save", onPress: saveWorkoutPlan }
-          ]
-        );
-      } else {
-        // Si no está autenticado, mostrar alerta de éxito y ofrecer iniciar sesión
-        Alert.alert(
-          "Routine Generated", 
-          "Create an account to save this workout plan and track your progress.",
-          [
-            { text: "Maybe Later", style: "cancel" },
-            { text: "Sign Up", onPress: () => setShowLoginModal(true) }
-          ]
-        );
+    if (!source) {
+      console.error(`No data found for method: ${method}`);
+      setRoutine([]);
+      Alert.alert("Error", "No routine data available for this method.");
+      return;
+    }
+
+    // Log structure of source data for debugging
+    console.log(`Source data keys:`, Object.keys(source));
+    if (source[goal]) {
+      console.log(`Goal data keys:`, Object.keys(source[goal]));
+      if (source[goal][level]) {
+        console.log(`Level data keys:`, Object.keys(source[goal][level]));
+      }
+    }
+
+    // For HIIT method, handle differently
+    if (method === 'hiit') {
+      try {
+        const routineSet = source[goal]?.[level]?.[daysPerWeek];
+
+        if (routineSet) {
+          console.log("HIIT routine found!");
+          setRoutine(routineSet);
+
+          // Si el usuario está autenticado, preguntar si quiere guardar la rutina
+          if (isAuthenticated) {
+            Alert.alert(
+              "HIIT Routine Generated",
+              "Do you want to save this HIIT workout plan to your profile?",
+              [
+                { text: "Not Now", style: "cancel" },
+                { text: "Save", onPress: saveWorkoutPlan }
+              ]
+            );
+          } else {
+            // Si no está autenticado, mostrar alerta de éxito y ofrecer iniciar sesión
+            Alert.alert(
+              "HIIT Routine Generated",
+              "Create an account to save this HIIT workout plan and track your progress.",
+              [
+                { text: "Maybe Later", style: "cancel" },
+                { text: "Sign Up", onPress: () => setShowLoginModal(true) }
+              ]
+            );
+          }
+        } else {
+          console.warn("No HIIT routine found for selected options");
+
+          // Provide default HIIT routine when specific one not found
+          const defaultHiitRoutine = [
+            {
+              day: "Day 1",
+              focus: "HIIT Cardio",
+              description: "High-intensity interval training session focusing on cardiovascular fitness.",
+              details: {
+                intervals: "8-12",
+                work: "30 seconds at 90% effort",
+                rest: "90 seconds active recovery",
+                totalTime: "20-30 minutes"
+              }
+            },
+            {
+              day: "Day 2",
+              focus: "Recovery",
+              description: "Active recovery or rest day."
+            },
+            {
+              day: "Day 3",
+              focus: "HIIT Cardio",
+              description: "High-intensity interval training with different exercise selection.",
+              details: {
+                intervals: "8-12",
+                work: "30 seconds at 90% effort",
+                rest: "90 seconds active recovery",
+                totalTime: "20-30 minutes"
+              }
+            }
+          ];
+
+          setRoutine(defaultHiitRoutine);
+
+          Alert.alert(
+            "Default HIIT Routine",
+            "We couldn't find a specific routine for your selections, so we've generated a standard HIIT protocol.",
+            [
+              { text: "OK" }
+            ]
+          );
+        }
+      } catch (error) {
+        console.error("Error generating HIIT routine:", error);
+        setRoutine([]);
+        Alert.alert("Error", "Failed to generate HIIT routine.");
       }
     } else {
-      setRoutine([]);
-      Alert.alert("Error", "No routine found for selected options.");
+      // Normal weight training routine
+      const routineSet = source?.[goal]?.[level]?.[daysPerWeek];
+
+      if (routineSet) {
+        setRoutine(routineSet);
+
+        // Si el usuario está autenticado, preguntar si quiere guardar la rutina
+        if (isAuthenticated) {
+          Alert.alert(
+            "Routine Generated",
+            "Do you want to save this workout plan to your profile?",
+            [
+              { text: "Not Now", style: "cancel" },
+              { text: "Save", onPress: saveWorkoutPlan }
+            ]
+          );
+        } else {
+          // Si no está autenticado, mostrar alerta de éxito y ofrecer iniciar sesión
+          Alert.alert(
+            "Routine Generated",
+            "Create an account to save this workout plan and track your progress.",
+            [
+              { text: "Maybe Later", style: "cancel" },
+              { text: "Sign Up", onPress: () => setShowLoginModal(true) }
+            ]
+          );
+        }
+      } else {
+        setRoutine([]);
+        Alert.alert("Error", "No routine found for selected options.");
+      }
     }
   };
 
@@ -88,28 +193,35 @@ function WorkoutScreen() {
     try {
       setIsSaving(true);
 
-      // Crear objeto con los datos del plan
+      // Crear objeto con los datos del plan, incluyendo la rutina completa
       const workoutPlanData = {
         methodKey: method,
         methodName: methodsConfig[method].name,
         goal: goal,
         level: level,
         daysPerWeek: parseInt(daysPerWeek),
-        totalDays: parseInt(daysPerWeek) * 4 // Suponiendo un plan de 4 semanas inicialmente
+        totalDays: parseInt(daysPerWeek) * 4, // Suponiendo un plan de 4 semanas inicialmente
+        routineData: routine // Guardamos la rutina completa
       };
+
+      console.log("Saving workout plan data:", workoutPlanData);
 
       // Guardar en el backend
       const savedPlan = await workoutService.createWorkoutPlan(workoutPlanData);
+      console.log("Plan saved successfully:", savedPlan);
+
+      // Trigger refresh to update UI in other screens
+      triggerMultipleRefresh(['workoutPlans', 'userProfile']);
 
       setIsSaving(false);
-      
+
       if (savedPlan) {
         Alert.alert(
           "Success",
           "Your workout plan has been saved to your profile.",
           [
-            { 
-              text: "View in Profile", 
+            {
+              text: "View in Profile",
               onPress: () => router.push('/(tabs)/profile')
             },
             { text: "OK" }
@@ -145,34 +257,34 @@ function WorkoutScreen() {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalCloseButton}
             onPress={() => setShowLoginModal(false)}
           >
             <Text style={{ color: Colors.white, fontSize: 24 }}>×</Text>
           </TouchableOpacity>
-          
+
           <Text style={styles.modalTitle}>Save Your Workout Plan</Text>
-          
+
           <Text style={styles.modalText}>
             Create an account or sign in to save your workout plan and track your progress over time.
           </Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.modalPrimaryButton}
             onPress={handleLoginRedirect}
           >
             <Text style={styles.modalPrimaryButtonText}>Log In</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.modalSecondaryButton}
             onPress={handleRegisterRedirect}
           >
             <Text style={styles.modalSecondaryButtonText}>Create Account</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             onPress={() => setShowLoginModal(false)}
           >
             <Text style={styles.modalCancelText}>Maybe Later</Text>
@@ -185,32 +297,199 @@ function WorkoutScreen() {
   // Corregir el problema de texto blanco sobre fondo blanco
   const getPickerItemColor = () => {
     // En iOS y Android, usamos el color del tema
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    if (Platform.OS === 'ios' ) {
       return Colors.text;
+    }
+    if (Platform.OS === 'android') {
+      return '#000000';
     }
     // En web u otras plataformas, podemos usar otro color si es necesario
     return Colors.text;
   };
 
+  const renderRoutine = () => {
+    if (routine.length === 0) return null;
+
+    // Detectar si la rutina tiene estructura de blocks (HIIT/Tabata)
+    const hasBlocks = routine.some(day => day.blocks && day.blocks.length > 0);
+
+    // Render HIIT/Tabata routines
+    if (method === 'hiit' || method === 'tabata' || hasBlocks) {
+      return (
+        <View style={styles.routineContainer}>
+          <Text style={styles.subtitle}>Your {method.toUpperCase()} Routine</Text>
+
+          {routine.map((day, index) => (
+            <View key={index} style={styles.dayContainer}>
+              <View style={styles.dayHeader}>
+                <Text style={styles.dayTitle}>{day.day || `Day ${index + 1}`}</Text>
+                <Text style={styles.dayFocus}>{day.focus || 'Interval Training'}</Text>
+              </View>
+
+              {day.description && (
+                <View style={styles.exerciseRow}>
+                  <Text style={styles.exerciseDescription}>{day.description}</Text>
+                </View>
+              )}
+
+              {/* Renderizar bloques si existen */}
+              {day.blocks && day.blocks.length > 0 && (
+                day.blocks.map((block, blockIndex) => (
+                  <View key={`block-${blockIndex}`}>
+                    {block.name && (
+                      <View style={styles.blockHeader}>
+                        <Text style={styles.blockName}>{block.name}</Text>
+                      </View>
+                    )}
+
+                    {block.exercises && block.exercises.map && (
+                      block.exercises.map((ex, exIndex) => (
+                        <View key={`block-ex-${exIndex}`} style={styles.exerciseRow}>
+                          <Text style={styles.exerciseName}>{ex.name}</Text>
+                          <View style={styles.exerciseDetails}>
+                            {ex.rounds && <Text style={styles.exerciseDetail}>Rounds: {ex.rounds}</Text>}
+                            {ex.work && <Text style={styles.exerciseDetail}>Work: {ex.work}</Text>}
+                            {ex.rest && <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>}
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                ))
+              )}
+
+              {/* Renderizar ejercicios estándar si no hay bloques pero hay ejercicios */}
+              {!day.blocks && day.exercises && day.exercises.map && (
+                day.exercises.map((ex, i) => (
+                  <View key={i} style={styles.exerciseRow}>
+                    <Text style={styles.exerciseName}>{ex.name}</Text>
+                    <View style={styles.exerciseDetails}>
+                      {ex.sets && <Text style={styles.exerciseDetail}>Sets: {ex.sets}</Text>}
+                      {ex.reps && <Text style={styles.exerciseDetail}>Reps: {ex.reps}</Text>}
+                      {ex.duration && <Text style={styles.exerciseDetail}>Duration: {ex.duration}</Text>}
+                      {ex.rest && <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>}
+                      {ex.intensity && <Text style={styles.exerciseDetail}>Intensity: {ex.intensity}</Text>}
+                    </View>
+                  </View>
+                ))
+              )}
+
+              {/* Renderizar detalles para HIIT genérico */}
+              {day.details && (
+                <View style={styles.exerciseRow}>
+                  <View style={styles.hiitDetailsContainer}>
+                    {day.details.intervals && (
+                      <Text style={styles.hiitDetailItem}>
+                        <Text style={styles.hiitDetailLabel}>Intervals:</Text> {day.details.intervals}
+                      </Text>
+                    )}
+                    {day.details.work && (
+                      <Text style={styles.hiitDetailItem}>
+                        <Text style={styles.hiitDetailLabel}>Work:</Text> {day.details.work}
+                      </Text>
+                    )}
+                    {day.details.rest && (
+                      <Text style={styles.hiitDetailItem}>
+                        <Text style={styles.hiitDetailLabel}>Rest:</Text> {day.details.rest}
+                      </Text>
+                    )}
+                    {day.details.totalTime && (
+                      <Text style={styles.hiitDetailItem}>
+                        <Text style={styles.hiitDetailLabel}>Total Time:</Text> {day.details.totalTime}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          ))}
+
+          {isAuthenticated ? (
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={saveWorkoutPlan}
+              disabled={isSaving}
+            >
+              <Text style={styles.saveButtonText}>
+                {isSaving ? "Saving..." : "Save to Profile"}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={() => setShowLoginModal(true)}
+            >
+              <Text style={styles.saveButtonText}>Save to Profile</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    }
+
+    // Regular weight training routine
+    return (
+      <View style={styles.routineContainer}>
+        <Text style={styles.subtitle}>Your Routine</Text>
+        {routine.map((day, index) => (
+          <View key={index} style={styles.dayContainer}>
+            <View style={styles.dayHeader}>
+              <Text style={styles.dayTitle}>{day.day}</Text>
+              <Text style={styles.dayFocus}>{day.focus}</Text>
+            </View>
+            {day.exercises && day.exercises.map((ex, i) => (
+              <View key={i} style={styles.exerciseRow}>
+                <Text style={styles.exerciseName}>{ex.name}</Text>
+                <View style={styles.exerciseDetails}>
+                  <Text style={styles.exerciseDetail}>Sets: {ex.sets}</Text>
+                  <Text style={styles.exerciseDetail}>Reps: {ex.reps}</Text>
+                  <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+
+        {isAuthenticated ? (
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={saveWorkoutPlan}
+            disabled={isSaving}
+          >
+            <Text style={styles.saveButtonText}>
+              {isSaving ? "Saving..." : "Save to Profile"}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={() => setShowLoginModal(true)}
+          >
+            <Text style={styles.saveButtonText}>Save to Profile</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {renderLoginModal()}
-      
+
       {isSaving && (
         <View style={styles.savingOverlay}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.savingText}>Saving your workout plan...</Text>
         </View>
       )}
-      
+
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerContainer}>
           <Text style={styles.title}>Generate Your Training Plan</Text>
           <Text style={styles.subtitle}>Customize your workout routine based on your goals and schedule</Text>
         </View>
 
-        <TouchableOpacity 
-          style={styles.recommendButton} 
+        <TouchableOpacity
+          style={styles.recommendButton}
           onPress={recommendRoutine}
         >
           <Text style={styles.recommendButtonText}>📊 Recommend Routine</Text>
@@ -228,9 +507,9 @@ function WorkoutScreen() {
                 itemStyle={styles.pickerItem}
               >
                 {methodKeys.map((key) => (
-                  <Picker.Item 
-                    key={key} 
-                    label={methodsConfig[key].name} 
+                  <Picker.Item
+                    key={key}
+                    label={methodsConfig[key].name}
                     value={key}
                     color={getPickerItemColor()}
                   />
@@ -250,9 +529,9 @@ function WorkoutScreen() {
                 itemStyle={styles.pickerItem}
               >
                 {methodsConfig[method].goals.map((g) => (
-                  <Picker.Item 
-                    key={g} 
-                    label={g.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())} 
+                  <Picker.Item
+                    key={g}
+                    label={g.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
                     value={g}
                     color={getPickerItemColor()}
                   />
@@ -271,15 +550,15 @@ function WorkoutScreen() {
                 dropdownIconColor={Colors.text}
                 itemStyle={styles.pickerItem}
               >
-                <Picker.Item 
-                  label="Beginner" 
-                  value="beginner" 
-                  color={getPickerItemColor()} 
+                <Picker.Item
+                  label="Beginner"
+                  value="beginner"
+                  color={getPickerItemColor()}
                 />
-                <Picker.Item 
-                  label="Intermediate" 
-                  value="intermediate" 
-                  color={getPickerItemColor()} 
+                <Picker.Item
+                  label="Intermediate"
+                  value="intermediate"
+                  color={getPickerItemColor()}
                 />
               </Picker>
             </View>
@@ -296,9 +575,9 @@ function WorkoutScreen() {
                 itemStyle={styles.pickerItem}
               >
                 {methodsConfig[method].daysPerWeek.map((num) => (
-                  <Picker.Item 
-                    key={num} 
-                    label={`${num} Days`} 
+                  <Picker.Item
+                    key={num}
+                    label={`${num} Days`}
                     value={num.toString()}
                     color={getPickerItemColor()}
                   />
@@ -308,55 +587,14 @@ function WorkoutScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={styles.generateButton} 
+        <TouchableOpacity
+          style={styles.generateButton}
           onPress={generateRoutine}
         >
           <Text style={styles.generateButtonText}>Generate Routine</Text>
         </TouchableOpacity>
 
-        {routine.length > 0 && (
-          <View style={styles.routineContainer}>
-            <Text style={styles.subtitle}>Your Routine</Text>
-            {routine.map((day, index) => (
-              <View key={index} style={styles.dayContainer}>
-                <View style={styles.dayHeader}>
-                  <Text style={styles.dayTitle}>{day.day}</Text>
-                  <Text style={styles.dayFocus}>{day.focus}</Text>
-                </View>
-                {day.exercises.map((ex, i) => (
-                  <View key={i} style={styles.exerciseRow}>
-                    <Text style={styles.exerciseName}>{ex.name}</Text>
-                    <View style={styles.exerciseDetails}>
-                      <Text style={styles.exerciseDetail}>Sets: {ex.sets}</Text>
-                      <Text style={styles.exerciseDetail}>Reps: {ex.reps}</Text>
-                      <Text style={styles.exerciseDetail}>Rest: {ex.rest}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ))}
-            
-            {isAuthenticated ? (
-              <TouchableOpacity 
-                style={styles.saveButton}
-                onPress={saveWorkoutPlan}
-                disabled={isSaving}
-              >
-                <Text style={styles.saveButtonText}>
-                  {isSaving ? "Saving..." : "Save to Profile"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity 
-                style={styles.saveButton}
-                onPress={() => setShowLoginModal(true)}
-              >
-                <Text style={styles.saveButtonText}>Save to Profile</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        {renderRoutine()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -502,6 +740,27 @@ const styles = StyleSheet.create({
     color: Colors.white,
     marginBottom: 4,
   },
+  exerciseDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  hiitDetailsContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  hiitDetailItem: {
+    fontSize: 14,
+    color: Colors.white,
+    marginBottom: 6,
+  },
+  hiitDetailLabel: {
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
   exerciseDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -511,6 +770,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginRight: 8,
+    marginBottom: 4,
   },
   // Estilos para el modal de login
   modalOverlay: {
@@ -593,6 +853,16 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 16,
     marginTop: 12,
+  },
+  blockHeader: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 8,
+    paddingHorizontal: 12,
+  },
+  blockName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: Colors.primary,
   },
 });
 

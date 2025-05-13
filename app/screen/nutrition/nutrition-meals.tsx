@@ -21,9 +21,12 @@ import { useAuth } from '../../../context/AuthContext';
 import Colors from '../../../constants/Colors';
 import foods from '../../../data/food/foods';
 import { Ionicons } from '@expo/vector-icons';
+import { useRefreshContext, RefreshableDataType } from '@/context/RefreshContext';
+
 
 function NutritionMealsScreen() {
   const { user, isAuthenticated } = useAuth();
+  const { triggerMultipleRefresh } = useRefreshContext();
   const router = useRouter();
   
   const [calories, setCalories] = useState('2000');
@@ -38,13 +41,15 @@ function NutritionMealsScreen() {
   const [showSaveModal, setShowSaveModal] = useState(false);
 
   const getPickerItemColor = () => {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    if (Platform.OS === 'ios' ) {
       return Colors.text;
+    }
+    if (Platform.OS === 'android') {
+      return '#000000';
     }
     return Colors.text;
   };
 
-  // Load calorie target from active nutrition goal
   useEffect(() => {
     const loadCalorieTarget = async () => {
       if (!isAuthenticated || !user) return;
@@ -112,13 +117,30 @@ function NutritionMealsScreen() {
     }
   
     const { protein, carbs, fat } = goalMacros[goal as keyof typeof goalMacros];
-    const totalProtein = ((caloriesNum * protein) / 100) / 4;
-    const totalCarbs = ((caloriesNum * carbs) / 100) / 4;
-    const totalFat = ((caloriesNum * fat) / 100) / 9;
+    const totalProtein = Math.floor((caloriesNum * protein) / 100) / 4;
+    const totalCarbs = Math.floor((caloriesNum * carbs) / 100) / 4;
+    const totalFat = Math.floor((caloriesNum * fat) / 100) / 9;
   
-    const proteinPerMeal = totalProtein / mealsNum;
-    const carbPerMeal = totalCarbs / mealsNum;
-    const fatPerMeal = totalFat / mealsNum;
+    // Función para distribuir valores de manera equitativa
+    const calculateDistributedValue = (total: number, numMeals: number) => {
+      const baseValue = Math.floor(total / numMeals);
+      const remainder = Math.round(total - (baseValue * numMeals));
+      
+      // Crear un array con los valores base
+      const values = Array(numMeals).fill(baseValue);
+      
+      // Distribuir el remainder entre las primeras comidas
+      for (let i = 0; i < remainder; i++) {
+        values[i]++;
+      }
+      
+      return values;
+    };
+  
+    // Distribuir macros entre comidas de forma que sumen el total correcto
+    const proteinPerMeals = calculateDistributedValue(totalProtein, mealsNum);
+    const carbPerMeals = calculateDistributedValue(totalCarbs, mealsNum);
+    const fatPerMeals = calculateDistributedValue(totalFat, mealsNum);
   
     const meals: any[] = [];
     const fruitIndex = Math.floor(Math.random() * mealsNum);
@@ -142,10 +164,11 @@ function NutritionMealsScreen() {
       const veggie = foods.vegetables[Math.floor(Math.random() * foods.vegetables.length)];
       const fruit = i === fruitIndex ? foods.fruits[Math.floor(Math.random() * foods.fruits.length)] : null;
   
-      const proteinGrams = parseFloat(proteinPerMeal.toFixed(1));
-      const carbGrams = parseFloat(carbPerMeal.toFixed(1));
-      const fatGrams = parseFloat(fatPerMeal.toFixed(1));
-      const totalMealCalories = parseFloat(((proteinGrams * 4) + (carbGrams * 4) + (fatGrams * 9)).toFixed(1));
+      // Usar los valores de macros distribuidos
+      const proteinGrams = proteinPerMeals[i];
+      const carbGrams = carbPerMeals[i];
+      const fatGrams = fatPerMeals[i];
+      const totalMealCalories = Math.floor((proteinGrams * 4) + (carbGrams * 4) + (fatGrams * 9));
       
       const foodItems = [
         {
@@ -196,6 +219,26 @@ function NutritionMealsScreen() {
       });
     }
   
+    // Verificación adicional: asegurar que las calorías totales coincidan exactamente
+    const calculatedCalories = Math.floor(meals.reduce((sum, meal) => sum + meal.macros.calories, 0));
+    
+    // Ajustar si hubiera una pequeña diferencia con la meta (por redondeos)
+    if (calculatedCalories !== caloriesNum) {
+      const diff = caloriesNum - calculatedCalories;
+      if (Math.abs(diff) < 20) { // Solo si la diferencia es pequeña
+        // Ajustar las calorías en la primera comida
+        meals[0].macros.calories += diff;
+        
+        // Si la diferencia es significativa, también ajustar carbohidratos 
+        // para mantener coherencia entre macros y calorías
+        if (Math.abs(diff) > 5) {
+          const carbAdjustment = Math.round(diff / 4); // 1g carb = 4 cal
+          meals[0].macros.carbs += carbAdjustment;
+          meals[0].foods.find(f => f.type === 'carb').amount += carbAdjustment;
+        }
+      }
+    }
+  
     setGeneratedMeals(meals);
     
     // Default plan name if not set from nutrition goal
@@ -205,7 +248,6 @@ function NutritionMealsScreen() {
     
     Alert.alert('Success', 'Meal plan generated successfully.');
   };
-
   const handleSaveMealPlan = () => {
     if (!isAuthenticated) {
       setShowLoginModal(true);
@@ -287,6 +329,8 @@ function NutritionMealsScreen() {
       };
       
       await mealService.createMealPlan(mealPlanData);
+
+      triggerMultipleRefresh(['mealPlans', 'userProfile']);
       
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -490,10 +534,10 @@ function NutritionMealsScreen() {
                 dropdownIconColor={Platform.OS === 'web' ? Colors.white : undefined}
                 itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="3 meals" value="3" color={Colors.text} />
-                <Picker.Item label="4 meals" value="4" color={Colors.text} />
-                <Picker.Item label="5 meals" value="5" color={Colors.text} />
-                <Picker.Item label="6 meals" value="6" color={Colors.text} />
+                <Picker.Item label="3 meals" value="3" color={getPickerItemColor()}/>
+                <Picker.Item label="4 meals" value="4" color={getPickerItemColor()}/>
+                <Picker.Item label="5 meals" value="5" color={getPickerItemColor()}/>
+                <Picker.Item label="6 meals" value="6" color={getPickerItemColor()}/>
               </Picker>
             </View>
           </View>
@@ -558,7 +602,7 @@ function NutritionMealsScreen() {
                 <View style={styles.totalMacroItem}>
                   <Text style={styles.totalMacroLabel}>Calories</Text>
                   <Text style={styles.totalMacroValue}>
-                    {generatedMeals.reduce((sum, meal) => sum + meal.macros.calories, 0)} kcal
+                  {Math.floor(generatedMeals.reduce((sum, meal) => sum + meal.macros.calories, 0))} kcal
                   </Text>
                 </View>
               </View>
@@ -567,19 +611,19 @@ function NutritionMealsScreen() {
                 <View style={styles.totalMacroItem}>
                   <Text style={styles.totalMacroLabel}>Protein</Text>
                   <Text style={styles.totalMacroValue}>
-                    {generatedMeals.reduce((sum, meal) => sum + meal.macros.protein, 0)}g
+                  {Math.floor(generatedMeals.reduce((sum, meal) => sum + meal.macros.protein, 0))}g
                   </Text>
                 </View>
                 <View style={styles.totalMacroItem}>
                   <Text style={styles.totalMacroLabel}>Carbs</Text>
                   <Text style={styles.totalMacroValue}>
-                    {generatedMeals.reduce((sum, meal) => sum + meal.macros.carbs, 0)}g
+                  {Math.floor(generatedMeals.reduce((sum, meal) => sum + meal.macros.carbs, 0))}g
                   </Text>
                 </View>
                 <View style={styles.totalMacroItem}>
                   <Text style={styles.totalMacroLabel}>Fat</Text>
                   <Text style={styles.totalMacroValue}>
-                    {generatedMeals.reduce((sum, meal) => sum + meal.macros.fat, 0)}g
+                  {Math.floor(generatedMeals.reduce((sum, meal) => sum + meal.macros.fat, 0))}g
                   </Text>
                 </View>
               </View>

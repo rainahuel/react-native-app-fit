@@ -14,6 +14,7 @@ export interface WorkoutPlan {
     daysCompleted: number;
     totalDays: number;
   };
+  routineData?: any[]; 
 }
 
 // Obtener todos los planes de entrenamiento
@@ -39,7 +40,7 @@ const getWorkoutPlanById = async (id: string): Promise<WorkoutPlan | null> => {
   }
 };
 
-// Crear un nuevo plan de entrenamiento
+
 const createWorkoutPlan = async (data: Partial<WorkoutPlan>): Promise<WorkoutPlan | null> => {
   try {
     const response = await api.post('/workout-plans', data);
@@ -61,9 +62,20 @@ const updateWorkoutProgress = async (id: string, daysCompleted: number): Promise
   }
 };
 
+const deleteWorkoutPlan = async (id: string): Promise<boolean> => {
+  try {
+    await api.delete(`/workout-plans/${id}`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting workout plan with id ${id}:`, error);
+    throw error;
+  }
+};
+
 export default {
   getWorkoutPlans,
   getWorkoutPlanById,
   createWorkoutPlan,
-  updateWorkoutProgress
+  updateWorkoutProgress,
+  deleteWorkoutPlan
 };
