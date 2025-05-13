@@ -613,7 +613,116 @@ const helmsData: HelmsData = {
               ]
             }
           ]
-        }
+        },
+        intermediate: {
+          3: [
+            {
+              day: "Day 1 - Full Body A",
+              focus: "Push Focus",
+              exercises: [
+                { name: "Back Squat", sets: 4, reps: "6-8", rest: "2-3 min" },
+                { name: "Bench Press", sets: 4, reps: "6-8", rest: "2-3 min" },
+                { name: "Overhead Press", sets: 3, reps: "10", rest: "2 min" },
+                { name: "Triceps Pushdown", sets: 3, reps: "12", rest: "90 sec" }
+              ]
+            },
+            {
+              day: "Day 2 - Full Body B",
+              focus: "Pull Focus",
+              exercises: [
+                { name: "Deadlift", sets: 3, reps: "5-6", rest: "3 min" },
+                { name: "Chin-Up", sets: 3, reps: "8-10", rest: "2-3 min" },
+                { name: "Incline Dumbbell Press", sets: 3, reps: "8-12", rest: "2 min" },
+                { name: "Barbell Row", sets: 3, reps: "8-10", rest: "2-3 min" },
+                { name: "Biceps Curl", sets: 2, reps: "12", rest: "60-90 sec" }
+              ]
+            },
+            {
+              day: "Day 3 - Full Body C",
+              focus: "Leg Focus",
+              exercises: [
+                { name: "Front Squat", sets: 4, reps: "8", rest: "2-3 min" },
+                { name: "Romanian Deadlift", sets: 3, reps: "10", rest: "2-3 min" },
+                { name: "Lat Pulldown", sets: 3, reps: "10-12", rest: "2 min" },
+                { name: "Lateral Raise", sets: 3, reps: "12-15", rest: "60-90 sec" },
+                { name: "Seated Calf Raise", sets: 3, reps: "15", rest: "60-90 sec" }
+              ]
+            }
+          ],
+          4: [
+            {
+              day: "Day 1 - Lower Body A",
+              focus: "Strength Focus",
+              exercises: [
+                { name: "Back Squat", sets: 4, reps: "5-6", rest: "2-3 min" },
+                { name: "Deadlift", sets: 3, reps: "5", rest: "2-3 min" },
+                { name: "Bulgarian Split Squat", sets: 3, reps: "8", rest: "2 min" },
+                { name: "Standing Calf Raise", sets: 4, reps: "10-12", rest: "1-2 min" }
+              ]
+            },
+            {
+              day: "Day 2 - Upper Body A",
+              focus: "Strength Focus",
+              exercises: [
+                { name: "Bench Press", sets: 4, reps: "5-6", rest: "2-3 min" },
+                { name: "Seated Cable Row", sets: 3, reps: "6-8", rest: "2-3 min" },
+                { name: "Overhead Press", sets: 3, reps: "8", rest: "2-3 min" },
+                { name: "Pull-Up", sets: 3, reps: "8", rest: "2-3 min" },
+                { name: "Chest Fly", sets: 2, reps: "15", rest: "1-2 min" }
+              ]
+            },
+            {
+              day: "Day 3 - Lower Body B",
+              focus: "Hypertrophy Focus",
+              exercises: [
+                { name: "Hip Thrust", sets: 3, reps: "10-12", rest: "2-3 min" },
+                { name: "Leg Press", sets: 3, reps: "10", rest: "2 min" },
+                { name: "Leg Extension", sets: 3, reps: "12", rest: "1-2 min" },
+                { name: "Leg Curl", sets: 3, reps: "12", rest: "1-2 min" },
+                { name: "Seated Calf Raise", sets: 4, reps: "15", rest: "1-2 min" }
+              ]
+            },
+            {
+              day: "Day 4 - Upper Body B",
+              focus: "Hypertrophy Focus",
+              exercises: [
+                { name: "Machine Chest Press", sets: 3, reps: "10", rest: "2 min" },
+                { name: "Barbell Row", sets: 3, reps: "10", rest: "2 min" },
+                { name: "Incline Dumbbell Press", sets: 3, reps: "10-12", rest: "2 min" },
+                { name: "Lat Pulldown", sets: 3, reps: "12", rest: "2 min" },
+                { name: "Lateral Raise", sets: 3, reps: "12-15", rest: "1-2 min" },
+                { name: "Biceps Curl", sets: 2, reps: "12", rest: "60-90 sec" },
+                { name: "Triceps Pushdown", sets: 2, reps: "12", rest: "60-90 sec" }
+              ]
+            }
+          ],
+          5: [
+            {
+              day: "Day 5 - Upper Accessory",
+              focus: "Shoulders & Arms",
+              exercises: [
+                { name: "Incline Dumbbell Press", sets: 3, reps: "10-12", rest: "90 sec" },
+                { name: "Overhead Press", sets: 3, reps: "8-10", rest: "90 sec" },
+                { name: "Lateral Raise", sets: 3, reps: "12-15", rest: "60 sec" },
+                { name: "EZ Bar Curl", sets: 3, reps: "12", rest: "60 sec" },
+                { name: "Triceps Extension", sets: 3, reps: "12", rest: "60 sec" }
+              ]
+            }
+          ],
+          6: [
+            {
+              day: "Day 6 - Lower Accessory + Core",
+              focus: "Glutes, Calves & Core",
+              exercises: [
+                { name: "Hip Thrust", sets: 3, reps: "10-12", rest: "90-120 sec" },
+                { name: "Leg Curl", sets: 3, reps: "12", rest: "90 sec" },
+                { name: "Standing Calf Raise", sets: 3, reps: "15", rest: "60 sec" },
+                { name: "Seated Calf Raise", sets: 3, reps: "15", rest: "60 sec" },
+                { name: "Plank", sets: 3, reps: "60 sec", rest: "30-60 sec" }
+              ]
+            }
+          ]    
+        }  
       },
       gainStrength: {
         beginner: {
