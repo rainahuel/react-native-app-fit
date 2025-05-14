@@ -4,11 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Definir la URL base para la API
 // Para desarrollo en dispositivo físico, usar la IP de tu máquina en lugar de localhost
-const API_URL = 'http://10.0.2.2:3000/api'; // Para emulador Android
+//const API_URL = 'http://10.0.2.2:3000/api'; // Para emulador Android
 // const API_URL = 'http://localhost:3000/api'; // Para iOS simulator
 // const API_URL = 'http://tu-ip-local:3000/api'; // Para dispositivo físico
-
+// const API_URL = 'http://tu-ip-local:3000/api'; // Para dispositivo físico
 // Crear instancia de axios con URL base
+
+const API_URL = 'https://api-fitness-app.fly.dev/api'
+
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {

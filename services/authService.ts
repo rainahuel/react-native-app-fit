@@ -1,4 +1,4 @@
-// services/authService.ts
+// services/authService.ts (Updated version)
 import api from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -34,6 +34,12 @@ export type UserData = {
     }
   };
   token?: string;
+};
+
+// Tipos para recuperación de contraseña
+export type PasswordResetRequestResponse = {
+  message: string;
+  devToken?: string; // Solo para desarrollo
 };
 
 // Guardar token en AsyncStorage
@@ -137,6 +143,28 @@ const checkAuthStatus = async (): Promise<UserData | null> => {
   }
 };
 
+// Solicitar restablecimiento de contraseña
+const requestPasswordReset = async (email: string): Promise<PasswordResetRequestResponse> => {
+  try {
+    const response = await api.post('/password/request-reset', { email });
+    return response.data;
+  } catch (error: any) {
+    console.error('Password reset request error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Restablecer contraseña con token
+const resetPassword = async (token: string, newPassword: string): Promise<{ message: string }> => {
+  try {
+    const response = await api.post('/password/reset', { token, newPassword });
+    return response.data;
+  } catch (error: any) {
+    console.error('Password reset error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
 export default {
   login,
   register,
@@ -146,5 +174,7 @@ export default {
   checkAuthStatus,
   getToken,
   saveToken,
-  removeToken
+  removeToken,
+  requestPasswordReset, 
+  resetPassword        
 };
