@@ -1,24 +1,33 @@
 {
-    "cli": {
-      "version": ">= 5.3.0",
-      "appVersionSource": "remote"
+  "cli": {
+    "version": ">= 5.3.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
     },
-    "build": {
-      "development": {
-        "developmentClient": true,
-        "distribution": "internal",
-        "channel": "development"
-      },
-      "preview": {
-        "distribution": "internal",
-        "channel": "preview"
-      },
-      "production": {
-        "autoIncrement": true,
-        "channel": "production"
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview"
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
       }
-    },
-    "submit": {
-      "production": {}
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "pc-api-key.json",
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
     }
   }
+}

@@ -4,13 +4,13 @@ export default {
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  scheme: "builtbyrain",
-  userInterfaceStyle: "dark", // Esto parece más apropiado dado el estilo de tu app
+  scheme: "builtbyrain", 
+  userInterfaceStyle: "dark",
   newArchEnabled: true,
   splash: {
     image: "./assets/images/splash-icon.png",
     resizeMode: "contain",
-    backgroundColor: "#121212" // Un fondo oscuro para el splash
+    backgroundColor: "#121212"
   },
   assetBundlePatterns: [
     "**/*"
@@ -26,7 +26,7 @@ export default {
       backgroundColor: "#121212"
     },
     edgeToEdgeEnabled: true,
-    package: "com.rainahuel.builtbyrain",
+    package: "com.rainahuel.builtbyrain", // Ya está correcto
     versionCode: 1
   },
   web: {
