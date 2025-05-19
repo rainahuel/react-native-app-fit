@@ -41,11 +41,6 @@ export default function HomeScreen() {
           >
             <Text style={styles.socialLink}>📺 @builtByRain</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => Linking.openURL('https://www.instagram.com/builtByRain')}
-          >
-            <Text style={styles.socialLink}>📷 @builtByRain</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
