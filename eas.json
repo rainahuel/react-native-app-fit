@@ -18,6 +18,10 @@
       "channel": "production",
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "buildConfiguration": "Release",
+        "distribution": "store"
       }
     }
   },

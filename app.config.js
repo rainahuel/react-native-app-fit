@@ -16,7 +16,7 @@ export default {
     "**/*"
   ],
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: "com.rainahuel.builtbyrain",
     buildNumber: "1"
   },
@@ -26,7 +26,7 @@ export default {
       backgroundColor: "#121212"
     },
     edgeToEdgeEnabled: true,
-    package: "com.rainahuel.builtbyrain", // Ya está correcto
+    package: "com.rainahuel.builtbyrain",
     versionCode: 1
   },
   web: {
