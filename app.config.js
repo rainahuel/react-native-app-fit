@@ -18,7 +18,10 @@ export default {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "com.rainahuel.builtbyrain",
-    buildNumber: "1"
+    buildNumber: "2",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false
+    }
   },
   android: {
     adaptiveIcon: {
