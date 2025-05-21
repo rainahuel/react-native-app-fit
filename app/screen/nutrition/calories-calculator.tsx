@@ -402,9 +402,14 @@ function CaloriesCalculatorScreen() {
             {renderInputField('strength', 'Minutes strength training')}
           </View>
 
-          <View style={styles.formRow}>
+          <View style={[styles.formGroup, { flex: 1 }]}>
             {renderInputField('cardio', 'Minutes cardio')}
             <View style={styles.formGroup}>
+            </View>
+          </View>
+
+          <View style={styles.formRow}>
+            <View style={[styles.formGroup, { flex: 1 }]}>
               <Text style={styles.label}>Goal</Text>
               <View style={styles.pickerContainer}>
                 <Picker
