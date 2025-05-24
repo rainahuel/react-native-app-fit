@@ -19,6 +19,7 @@ import Colors from '../../constants/Colors';
 import { useAuth } from '../../context/AuthContext';
 import { useRefreshContext, RefreshableDataType } from '@/context/RefreshContext';
 import { useRefreshableData } from '@/hooks/useRefreshableData';
+import authService from '../../services/authService';
 
 // Tipos para la información guardada
 interface NutritionGoal {
@@ -202,6 +203,49 @@ export default function ProfileScreen() {
                 }
             ]
         );
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            "Delete Account",
+            "⚠️ This action cannot be undone!\n\nAll your data including:\n• Nutrition goals\n• Meal plans\n• Workout plans\n• Profile information\n\nWill be permanently deleted.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Delete Account",
+                    style: "destructive",
+                    onPress: confirmDeleteAccount
+                }
+            ]
+        );
+    };
+
+    const confirmDeleteAccount = async () => {
+        try {
+            await authService.deleteAccount();
+
+            Alert.alert(
+                "Account Deleted",
+                "Your account has been successfully deleted.",
+                [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            // El signOut limpiará el estado y navegará al login
+                            signOut();
+                        }
+                    }
+                ]
+            );
+        } catch (error: any) {
+            Alert.alert(
+                "Error",
+                error.response?.data?.message || error.message || "Failed to delete account. Please try again."
+            );
+        }
     };
 
 
@@ -620,6 +664,22 @@ export default function ProfileScreen() {
                         <Text style={styles.quickLinkText}>Create Workout Plan</Text>
                     </TouchableOpacity>
                 </View>
+
+
+                <View style={styles.dangerZoneContainer}>
+                    <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+                    <Text style={styles.dangerZoneDescription}>
+                        Once you delete your account, there is no going back. Please be certain.
+                    </Text>
+
+                    <TouchableOpacity
+                        style={styles.deleteAccountButton}
+                        onPress={handleDeleteAccount}
+                    >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                        <Text style={styles.deleteAccountButtonText}>Delete My Account</Text>
+                    </TouchableOpacity>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -1001,4 +1061,44 @@ const styles = StyleSheet.create({
         color: Colors.white,
         fontWeight: '600',
     },
+
+    // Agregar estos estilos al final de tu StyleSheet en ProfileScreen
+
+// Zona Peligrosa
+dangerZoneContainer: {
+    margin: 16,
+    marginTop: 32,
+    padding: 20,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+  },
+  dangerZoneTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ff3b30',
+    marginBottom: 8,
+  },
+  dangerZoneDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  deleteAccountButton: {
+    backgroundColor: '#ff3b30',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  deleteAccountButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
 });

@@ -165,6 +165,19 @@ const resetPassword = async (token: string, newPassword: string): Promise<{ mess
   }
 };
 
+const deleteAccount = async (): Promise<{ message: string; deletedUserId: string }> => {
+  try {
+    const response = await api.delete('/users/profile');
+    
+    await removeToken();
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Delete account error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
 export default {
   login,
   register,
@@ -176,5 +189,6 @@ export default {
   saveToken,
   removeToken,
   requestPasswordReset, 
-  resetPassword        
+  resetPassword,
+  deleteAccount        
 };
